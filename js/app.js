@@ -314,12 +314,20 @@ const ICONS = {
 
 const initials = (name) =>
   (name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+// Barvy koleček. Každý si může vybrat svou, kdo nevybere, dostane barvu podle jména.
+const COLORS = {
+  red: "Červená", orange: "Oranžová", gold: "Zlatá", green: "Zelená",
+  teal: "Tyrkysová", blue: "Modrá", purple: "Fialová", pink: "Růžová"
+};
+const COLOR_KEYS = Object.keys(COLORS);
 const hue = (name) => {
   let h = 0;
   for (const c of name || "") h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return h % 4;
+  return h % COLOR_KEYS.length;
 };
-const avatar = (name) => `<span class="av c${hue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
+const colorOf = (name, color) => (COLORS[color] ? color : COLOR_KEYS[hue(name)]);
+const avatar = (name, color) => `<span class="av k-${colorOf(name, color)}" aria-hidden="true">${esc(initials(name))}</span>`;
+const avatarOf = (uid, name) => avatar(name, state.users.get(uid)?.color);
 const logo = (cls = "", size = 36) =>
   `<img class="logo ${cls}" src="icons/icon.svg" alt="" width="${size}" height="${size}">`;
 
@@ -429,7 +437,7 @@ function shell(inner) {
       <div class="top-in">
         ${logo("", 36)}
         <div class="brand">${esc(TEAM_NAME)}</div>
-        <span title="${esc(state.me.displayName)}">${avatar(state.me.displayName)}</span>
+        <button class="avbtn" data-action="profile" aria-label="Upravit profil, ${esc(state.me.displayName)}">${avatar(state.me.displayName, state.me.color)}</button>
       </div>
     </header>
     <main>${inner}</main>
@@ -609,7 +617,7 @@ function viewTournament(t) {
   if (st.state === "draft") {
     html += `<h2>Hráči (${players.length})</h2>`;
     html += players.length
-      ? `<ul class="plist">${players.map((p) => `<li>${avatar(p.name)}<span>${esc(p.name)}${p.uid ? "" : ` <small class="muted">host</small>`}</span></li>`).join("")}</ul>`
+      ? `<ul class="plist">${players.map((p) => `<li>${p.uid ? avatarOf(p.uid, p.name) : avatar(p.name)}<span>${esc(p.name)}${p.uid ? "" : ` <small class="muted">host</small>`}</span></li>`).join("")}</ul>`
       : `<div class="empty"><p>Zatím tu nejsou žádní hráči.</p></div>`;
     if (manage) {
       html += players.length < 2
@@ -1033,12 +1041,12 @@ function viewTeam() {
   const admin = state.me.role === "admin";
   const mail = (u) => state.private.get(u.id)?.email || "";
 
-  let html = `<div class="bar"><h1>Tým</h1><button class="btn" data-action="rename">Změnit jméno</button></div>`;
+  let html = `<div class="bar"><h1>Tým</h1><button class="btn" data-action="profile">Upravit profil</button></div>`;
 
   if (admin && pending.length) {
     html += `<h2>Čekají na schválení</h2><div class="rows">${pending.map((u) => `
       <div class="row">
-        <div class="who">${avatar(u.displayName)}<div><strong>${esc(u.displayName)}</strong>${mail(u) ? `<br><small class="muted">${esc(mail(u))}</small>` : ""}</div></div>
+        <div class="who">${avatar(u.displayName, u.color)}<div><strong>${esc(u.displayName)}</strong>${mail(u) ? `<br><small class="muted">${esc(mail(u))}</small>` : ""}</div></div>
         <div class="row-actions">
           <button class="btn primary" data-action="approve" data-uid="${u.id}">Schválit</button>
           <button class="btn" data-action="reject" data-uid="${u.id}">Odmítnout</button>
@@ -1051,7 +1059,7 @@ function viewTeam() {
     return `
       <div class="row">
         <div class="who">
-          ${avatar(u.displayName)}
+          ${avatar(u.displayName, u.color)}
           <div>
             <strong>${esc(u.displayName)}</strong>${self ? ` <small class="muted">(ty)</small>` : ""}
             ${admin && mail(u) ? `<br><small class="muted">${esc(mail(u))}</small>` : ""}
@@ -1324,15 +1332,22 @@ function openChangelogDialog() {
   $dlg.showModal();
 }
 
-function openRenameDialog() {
+function openProfileDialog() {
+  const cur = colorOf(state.me.displayName, state.me.color);
   $dlg.innerHTML = `
-    <form id="nameForm" class="stack">
-      <h2>Změnit jméno</h2>
-      <label>Jméno v týmu<input name="name" required maxlength="40" value="${esc(state.me.displayName)}" autofocus></label>
+    <form id="profileForm" class="stack">
+      <h2>Můj profil</h2>
+      <div class="avpreview">${avatar(state.me.displayName, cur).replace('class="av ', 'class="av big ').replace('<span', '<span id="avPreview"')}</div>
+      <label>Jméno v týmu<input name="name" required maxlength="40" value="${esc(state.me.displayName)}"></label>
+      <fieldset class="colors">
+        <legend>Barva kolečka</legend>
+        ${COLOR_KEYS.map((k) => `
+          <label class="swatch"><input type="radio" name="color" value="${k}" ${k === cur ? "checked" : ""} aria-label="${COLORS[k]}"><span class="sw av k-${k}" aria-hidden="true"></span></label>`).join("")}
+      </fieldset>
       <div class="actions">
         <span class="spacer"></span>
         <button type="button" class="btn" data-dlg="close">Zrušit</button>
-        <button type="submit" class="btn primary">Uložit jméno</button>
+        <button type="submit" class="btn primary">Uložit profil</button>
       </div>
     </form>`;
   $dlg.showModal();
@@ -1600,7 +1615,7 @@ document.addEventListener("click", async (e) => {
       case "note":
         openNoteDialog(id);
         break;
-      case "rename": openRenameDialog(); break;
+      case "profile": openProfileDialog(); break;
       case "changelog": openChangelogDialog(); break;
       case "round-new": openRoundDialog(); break;
       case "round-edit": openRoundDialog(id); break;
@@ -1677,6 +1692,13 @@ document.addEventListener("change", (e) => {
       toast(`Nejvíc ${MAX_PLAYERS} hráčů.`);
     }
     updatePlayerCount();
+  }
+});
+
+document.addEventListener("change", (e) => {
+  if (e.target.name === "color" && e.target.closest("#profileForm")) {
+    const pv = document.getElementById("avPreview");
+    if (pv) pv.className = `av big k-${e.target.value}`;
   }
 });
 
@@ -1861,12 +1883,15 @@ document.addEventListener("submit", async (e) => {
       return;
     }
 
-    if (f.id === "nameForm") {
+    if (f.id === "profileForm") {
       const name = (fd.get("name") || "").trim().slice(0, 40);
+      const color = fd.get("color");
       if (!name) return;
-      await updateDoc(doc(db, "users", state.user.uid), { displayName: name });
+      const data = { displayName: name };
+      if (COLORS[color]) data.color = color;
+      await updateDoc(doc(db, "users", state.user.uid), data);
       closeDialog();
-      toast("Jméno je uložené.");
+      toast("Profil je uložený.");
     }
   } catch (err) {
     console.error(err);

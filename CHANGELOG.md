@@ -3,6 +3,12 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.11 (20. 11. 2026)
+
+- Každý si může vybrat barvu svého kolečka z osmi barev. Barvu vidí všichni v týmu, v turnajích i u zápasů.
+- Profil (jméno a barva) se otevírá tlačítkem Upravit profil v záložce Tým, nebo klepnutím na své kolečko nahoře.
+- Kdo si barvu nevybere, má dál barvu podle jména.
+
 ## Verze 0.10 (20. 11. 2026)
 
 - Betony se počítají přesně podle pravidel: 1 beton za kolo s méně než 20 body a 1 beton za každou šipku vedle. Obojí se sčítá, takže kolo vedle, 8, 8 jsou 2 betony.

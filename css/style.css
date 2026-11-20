@@ -68,10 +68,25 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
   display: inline-grid; place-items: center; flex: none;
   width: 2.3rem; height: 2.3rem; border-radius: 50%; font-size: .85rem; font-weight: 700;
 }
-.av.c0 { background: var(--red); color: var(--on-red); }
-.av.c1 { background: var(--green); color: var(--on-green); }
-.av.c2 { background: var(--brass); color: var(--ink); }
-.av.c3 { background: var(--cream); color: var(--ink); }
+.av { background: var(--av, var(--red)); color: var(--av-ink, var(--ink)); }
+.av.big { width: 4.5rem; height: 4.5rem; font-size: 1.5rem; }
+.av.k-red { --av: #d63a2f; --av-ink: var(--on-red); }
+.av.k-orange { --av: #e8873a; }
+.av.k-gold { --av: #d4b46a; }
+.av.k-green { --av: #2f9a63; }
+.av.k-teal { --av: #3cb8b2; }
+.av.k-blue { --av: #4a8fe0; }
+.av.k-purple { --av: #9b73d1; }
+.av.k-pink { --av: #e0709f; }
+.avbtn { display: inline-flex; padding: 0; background: none; border: 0; border-radius: 50%; }
+.avpreview { display: flex; justify-content: center; margin: .2rem 0; }
+.colors { display: grid; grid-template-columns: repeat(4, 1fr); justify-items: center; gap: .8rem .6rem; }
+.colors legend { grid-column: 1 / -1; justify-self: start; }
+.swatch { position: relative; display: block; }
+.swatch input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; cursor: pointer; }
+.swatch .sw { width: 2.9rem; height: 2.9rem; border: 3px solid transparent; box-sizing: border-box; }
+.swatch input:checked + .sw { border-color: var(--cream); box-shadow: 0 0 0 2px var(--panel) inset; }
+.swatch input:focus-visible + .sw { outline: 3px solid var(--brass); outline-offset: 2px; }
 
 main {
   max-width: 760px; margin: 0 auto;

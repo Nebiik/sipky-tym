@@ -29,12 +29,14 @@ service cloud.firestore {
         && request.resource.data.displayName.size() <= 40;
 
       allow update: if
-        // každý může změnit jen své zobrazované jméno
+        // každý může změnit jen své jméno a barvu kolečka
         (signedIn() && request.auth.uid == uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'color'])
           && request.resource.data.displayName is string
           && request.resource.data.displayName.size() > 0
-          && request.resource.data.displayName.size() <= 40)
+          && request.resource.data.displayName.size() <= 40
+          && (!('color' in request.resource.data)
+              || request.resource.data.color in ['red', 'orange', 'gold', 'green', 'teal', 'blue', 'purple', 'pink']))
         ||
         // admin může měnit roli
         (isAdmin()

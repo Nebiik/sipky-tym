@@ -1,7 +1,16 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.10";
+export const VERSION = "0.11";
 
 export const CHANGELOG = [
+  {
+    version: "0.11",
+    date: "20. 11. 2026",
+    changes: [
+      "Každý si může vybrat barvu svého kolečka z osmi barev. Barvu vidí všichni v týmu, v turnajích i u zápasů.",
+      "Profil (jméno a barva) se otevírá tlačítkem Upravit profil v záložce Tým, nebo klepnutím na své kolečko nahoře.",
+      "Kdo si barvu nevybere, má dál barvu podle jména."
+    ]
+  },
   {
     version: "0.10",
     date: "20. 11. 2026",
