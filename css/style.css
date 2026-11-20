@@ -516,3 +516,35 @@ body.scoring #toast { bottom: auto; top: calc(.8rem + env(safe-area-inset-top));
 
 .bet { color: var(--red-text); font-size: .8rem; font-weight: 700; }
 .fine { margin: .6rem 0 0; padding: .6rem .85rem; background: var(--panel); border-left: 4px solid var(--brass); border-radius: 8px; }
+
+/* liga ze sipky.org */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 1.1rem; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.seg button { min-height: 44px; font-weight: 700; color: var(--dim); background: none; border: 0; border-radius: 10px; }
+.seg button.on { background: var(--cream); color: var(--ink); }
+.ligahero {
+  display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; padding: .9rem 1.1rem;
+  background: var(--panel); border: 2px solid var(--brass); border-radius: 16px;
+}
+.lh-rank { font-family: "Bricolage Grotesque", system-ui, sans-serif; font-size: 2.6rem; font-weight: 800; line-height: 1; }
+.standings.ligatable th, .standings.ligatable td { padding: .55rem .3rem; font-size: .86rem; }
+.standings.ligatable td.nm { white-space: normal; min-width: 0; line-height: 1.25; }
+.standings.ligatable th:first-child, .standings.ligatable td:first-child { padding-left: .55rem; }
+.standings.ligatable th:last-child, .standings.ligatable td:last-child { padding-right: .55rem; }
+.ligatable tr.ours td { background: rgba(212, 180, 106, .15); font-weight: 700; }
+.ligatable tr.ours td:first-child { box-shadow: inset 4px 0 0 var(--brass); }
+.fxlist { display: grid; gap: .5rem; }
+.fxrow {
+  display: grid; grid-template-columns: 5.2rem 1fr; gap: .4rem .8rem; align-items: center; padding: .75rem .85rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+}
+.fxrow.ours { border-left: 4px solid var(--brass); }
+.fxdate { display: grid; line-height: 1.25; }
+.fxdate .muted { font-size: .82rem; }
+.fxmatch { display: grid; gap: .1rem; overflow-wrap: anywhere; }
+.fxmatch .us { font-weight: 800; color: var(--brass); }
+.fxmatch small { display: block; }
+.fxact { grid-column: 1 / -1; }
+.fxact .btn { width: 100%; }
+.otherfx { margin-top: 1.2rem; }
+.otherfx summary { cursor: pointer; padding: .5rem 0; color: var(--dim); }
+.otherfx .fxlist { margin-top: .5rem; }

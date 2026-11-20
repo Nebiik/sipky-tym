@@ -69,3 +69,20 @@ smaž aplikaci z plochy a přidej ji znovu.
 - Po každé změně zdrojového kódu se `js/bundle.js` musí sestavit znovu. Když budeš měnit kód ručně,
   změna se v appce neprojeví, dokud se bundle nepřegeneruje.
 - `js/firebase-config.js` je záměrně mimo bundle, takže se tvoje Firebase údaje nepřepisují.
+
+## Liga ze sipky.org
+
+Tabulka a rozpis ligy se berou z veřejných stránek Unie šipkových organizací (sipky.org, systém Leguan).
+
+- Úloha `.github/workflows/liga.yml` ji 4× denně spustí a skript `scripts/fetch-liga.mjs` uloží
+  tabulku družstev a rozpis do `data/liga.json`. Aplikace čte jen tenhle soubor.
+- Stahují se **jen týmová tabulka a rozpis**, žádné statistiky jednotlivých hráčů.
+- Na jedno spuštění jsou 2 požadavky na web ligy a skript se představuje jako `PodchodKlubR-liga`.
+- Nastavení je v `scripts/liga.config.json`: `group` je začátek názvu skupiny (třeba `2. liga C`)
+  a `team` je přesný název týmu na sipky.org (`Klub R Podchod Brno`). Po začátku nové sezóny
+  tady bude potřeba upravit skupinu.
+- Ruční spuštění: na GitHubu záložka **Actions**, **Liga ze sipky.org**, **Run workflow**.
+- Když úloha selže, v aplikaci zůstanou poslední data. Důvod je v logu úlohy (nenalezená skupina,
+  změněná struktura stránky, nebo odmítnutí webem ligy).
+- GitHub u veřejných repozitářů po 60 dnech bez aktivity naplánované úlohy vypne. Stačí je znovu
+  zapnout v záložce Actions.

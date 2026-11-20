@@ -3,6 +3,12 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.12 (20. 11. 2026)
+
+- Liga ze sipky.org: v záložce Zápasy je nový přepínač Zápisy a Liga. V Lize je tabulka vaší skupiny se zvýrazněným naším týmem, naše pozice a naše další utkání.
+- Data se stahují automaticky čtyřikrát denně úlohou na GitHubu. Stahuje se jen týmová tabulka a rozpis, ne statistiky jednotlivých hráčů.
+- U našeho utkání je tlačítko Založit kolo, které předvyplní soupeře a datum. Když kolo už existuje, nabídne jeho otevření.
+
 ## Verze 0.11 (20. 11. 2026)
 
 - Každý si může vybrat barvu svého kolečka z osmi barev. Barvu vidí všichni v týmu, v turnajích i u zápasů.

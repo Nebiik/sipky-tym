@@ -45,6 +45,9 @@ const state = {
   rid: null,           // otevřené kolo
   matches: new Map(),  // zápasy otevřeného kola: číslo zápasu -> dokument
   mslot: null,         // otevřený zápas
+  mview: "rounds",      // v záložce Zápasy: "rounds" (zápisy) nebo "liga"
+  liga: { status: "idle", data: null, error: "" },
+  ligaAll: false,      // zobrazit všechny sloupce tabulky ligy
   mult: 1,             // zvolený násobek (1 single, 2 double, 3 triple)
   oppInput: "",        // zbytek soupeře, který se právě píše
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
@@ -708,7 +711,7 @@ function closeRound() {
 
 function viewMatches() {
   if (state.rid && !curRound()) closeRound();   // kolo mezitím někdo smazal
-  if (!state.rid) return viewRounds();
+  if (!state.rid) return state.mview === "liga" ? viewLiga() : viewRounds();
   const r = curRound();
   if (!state.ready.matches) return `<p class="muted">Načítám zápasy…</p>`;
   if (state.mslot) {
@@ -720,7 +723,7 @@ function viewMatches() {
 }
 
 function viewRounds() {
-  let html = `<div class="bar"><h1>Zápasy</h1><button class="btn primary" data-action="round-new">Nové kolo</button></div>`;
+  let html = `${segControl()}<div class="bar"><h1>Zápasy</h1><button class="btn primary" data-action="round-new">Nové kolo</button></div>`;
   if (!state.rounds.length) {
     html += `<div class="empty"><p><strong>Zatím žádné ligové kolo.</strong></p><p>Založ kolo, vyber naše hráče a zapisuj zápasy šipku po šipce. Křížky a průměry se spočítají samy.</p></div>`;
   } else {
@@ -812,6 +815,129 @@ function viewRound(r) {
         }).join("")}</tbody>
       </table></div>`;
   }
+  return html;
+}
+
+/* ----- liga ze sipky.org ----- */
+
+const normTeam = (s) => String(s || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const fmtDateTime = (iso) => {
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleString("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+const pointsWord = (n) => (n === 1 ? "bod" : n >= 2 && n <= 4 ? "body" : "bodů");
+
+function segControl() {
+  const b = (v, label) => `<button class="${state.mview === v ? "on" : ""}" data-action="mview" data-v="${v}" aria-pressed="${state.mview === v}">${label}</button>`;
+  return `<div class="seg" role="group" aria-label="Zobrazení">${b("rounds", "Zápisy")}${b("liga", "Liga")}</div>`;
+}
+
+async function loadLiga() {
+  state.liga = { status: "loading", data: null, error: "" };
+  render();
+  try {
+    const res = await fetch("data/liga.json", { cache: "no-cache" });
+    if (res.status === 404) {
+      state.liga = { status: "missing", data: null, error: "" };
+    } else if (!res.ok) {
+      throw new Error(`Server vrátil chybu ${res.status}.`);
+    } else {
+      const data = await res.json();
+      if (!Array.isArray(data.standings) || !Array.isArray(data.fixtures || [])) throw new Error("Soubor s ligou nemá správný tvar.");
+      state.liga = { status: "ok", data, error: "" };
+    }
+  } catch (e) {
+    state.liga = { status: "error", data: null, error: e.message || String(e) };
+  }
+  render();
+}
+
+function fixtureRow(f, i, d, ours) {
+  const us = normTeam(d.team);
+  const homeUs = normTeam(f.home) === us;
+  const awayUs = normTeam(f.away) === us;
+  const fdate = new Date(`${f.date}T12:00:00`);
+  const dateTxt = isNaN(fdate) ? esc(f.date) : `${esc(weekdayShort(fdate))} ${fdate.getDate()}. ${fdate.getMonth() + 1}.`;
+  let action = "";
+  if (ours) {
+    const opp = homeUs ? f.away : f.home;
+    const existing = state.rounds.find((r) => !isNaN(fdate) && sameDay(r.date.toDate(), fdate) && normTeam(r.opponent) === normTeam(opp));
+    action = existing
+      ? `<button class="btn" data-action="round-open" data-id="${existing.id}">Otevřít kolo</button>`
+      : `<button class="btn primary" data-action="liga-new-round" data-i="${i}">Založit kolo</button>`;
+  }
+  return `
+    <div class="fxrow ${ours ? "ours" : ""}">
+      <div class="fxdate"><strong>${dateTxt}</strong><span class="muted">${esc(f.time || "")}${f.round ? `, kolo ${f.round}` : ""}</span></div>
+      <div class="fxmatch">
+        <span class="${homeUs ? "us" : ""}">${esc(f.home)}</span> <span class="muted">vs.</span> <span class="${awayUs ? "us" : ""}">${esc(f.away)}</span>
+        ${f.venue ? `<small class="muted">${esc(f.venue)}</small>` : ""}
+      </div>
+      ${action ? `<div class="fxact">${action}</div>` : ""}
+    </div>`;
+}
+
+function viewLiga() {
+  const L = state.liga;
+  const head = segControl();
+  if (L.status === "idle") {
+    setTimeout(loadLiga, 0);
+    return `${head}<p class="muted">Načítám ligu…</p>`;
+  }
+  if (L.status === "loading") return `${head}<p class="muted">Načítám ligu…</p>`;
+  if (L.status === "missing") {
+    return `${head}<div class="empty"><p><strong>Data ligy se ještě nenačetla.</strong></p>
+      <p>Stahuje je úloha na GitHubu. Spusť ji ručně: záložka Actions, Liga ze sipky.org, Run workflow. Pak chvíli počkej a dej Obnovit.</p></div>
+      <p><button class="btn" data-action="liga-reload">Obnovit</button></p>`;
+  }
+  if (L.status === "error") {
+    return `${head}<div class="empty"><p><strong>Ligu se nepodařilo načíst.</strong></p><p>${esc(L.error)}</p></div>
+      <p><button class="btn" data-action="liga-reload">Zkusit znovu</button></p>`;
+  }
+
+  const d = L.data;
+  const us = d.standings.find((s) => normTeam(s.team) === normTeam(d.team));
+  const all = state.ligaAll;
+  const idxs = (d.fixtures || []).map((f, i) => i);
+  const isOurs = (f) => [normTeam(f.home), normTeam(f.away)].includes(normTeam(d.team));
+  const oursIdx = idxs.filter((i) => isOurs(d.fixtures[i]));
+  const otherIdx = idxs.filter((i) => !isOurs(d.fixtures[i]));
+  const safeUrl = /^https:\/\/www\.sipky\.org\//.test(d.sourceUrl || "") ? d.sourceUrl : "";
+
+  let html = `${head}
+    <div class="bar">
+      <div><h1>Liga</h1><p class="muted meta">${esc(d.group || "")}${d.season ? `, sezóna ${esc(d.season)}` : ""}</p></div>
+      <button class="btn" data-action="liga-reload">Obnovit</button>
+    </div>`;
+
+  if (us) {
+    html += `<div class="ligahero"><span class="lh-rank">${us.rank}.</span>
+      <span><strong>${esc(d.team)}</strong><br><span class="muted">${us.points} ${pointsWord(us.points)} po ${us.played} ${us.played === 1 ? "kole" : "kolech"}</span></span></div>`;
+  }
+
+  html += `<div class="tablewrap"><table class="standings ligatable small">
+    <thead><tr><th>#</th><th>Družstvo</th><th>Kol</th><th>V</th>${all ? "<th>VP</th>" : ""}<th>R</th>${all ? "<th>PP</th>" : ""}<th>P</th>${all ? "<th>K</th>" : ""}<th>Skóre</th>${all ? "<th>Legy</th>" : ""}<th>Body</th></tr></thead>
+    <tbody>${d.standings.map((s) => `
+      <tr class="${normTeam(s.team) === normTeam(d.team) ? "ours" : ""}">
+        <td>${s.rank}.</td><td class="nm">${esc(s.team)}</td><td>${s.played}</td><td>${s.v}</td>${all ? `<td>${s.vp}</td>` : ""}<td>${s.r}</td>${all ? `<td>${s.pp}</td>` : ""}<td>${s.p}</td>${all ? `<td>${s.k}</td>` : ""}
+        <td>${s.scoreFor}:${s.scoreAgainst}</td>${all ? `<td>${s.legsFor}:${s.legsAgainst}</td>` : ""}<td><b>${s.points}</b></td>
+      </tr>`).join("")}</tbody></table></div>
+    <p><button class="link" data-action="liga-cols">${all ? "Méně sloupců" : "Všechny sloupce"}</button></p>`;
+
+  html += `<h2>Naše další utkání</h2>`;
+  html += oursIdx.length
+    ? `<div class="fxlist">${oursIdx.map((i) => fixtureRow(d.fixtures[i], i, d, true)).join("")}</div>`
+    : `<p class="muted">V rozpisu teď žádné naše utkání není.</p>`;
+
+  if (otherIdx.length) {
+    html += `<details class="otherfx"><summary>Ostatní utkání v lize (${otherIdx.length})</summary>
+      <div class="fxlist">${otherIdx.map((i) => fixtureRow(d.fixtures[i], i, d, false)).join("")}</div></details>`;
+  }
+
+  html += `<p class="muted legend">Zdroj: ${safeUrl ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener">sipky.org</a>` : "sipky.org"}.
+    Zkontrolováno ${esc(fmtDateTime(d.checkedAt))}${d.sourceSync ? `, stav na webu ligy z ${esc(d.sourceSync)}` : ""}.
+    Zkratky sloupců jsou stejné jako na webu ligy.</p>`;
   return html;
 }
 
@@ -1228,17 +1354,17 @@ function openMatchDialog(tid, mid) {
   $dlg.showModal();
 }
 
-function openRoundDialog(id) {
+function openRoundDialog(id, preset) {
   const r = id ? state.rounds.find((x) => x.id === id) : null;
   dlgGuests = r ? (r.ourPlayers || []).filter((p) => !p.uid).map((p) => ({ id: p.id, name: p.name })) : [];
   const selected = new Set(r ? (r.ourPlayers || []).filter((p) => p.uid).map((p) => p.uid) : []);
   const members = [...state.users.values()].filter((u) => isMemberRole(u.role)).sort(byName);
-  const d = r ? r.date.toDate() : new Date();
+  const d = r ? r.date.toDate() : preset?.date || new Date();
   const dateVal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   $dlg.innerHTML = `
     <form id="roundForm" class="stack" data-id="${r?.id || ""}">
       <h2>${r ? "Upravit kolo" : "Nové ligové kolo"}</h2>
-      <label>Soupeř<input name="opponent" required maxlength="60" placeholder="Např. Double Trouble Brno B" value="${esc(r?.opponent || "")}"></label>
+      <label>Soupeř<input name="opponent" required maxlength="60" placeholder="Např. Double Trouble Brno B" value="${esc(r?.opponent || preset?.opponent || "")}"></label>
       <label>Datum<input type="date" name="date" required value="${dateVal}"></label>
       <fieldset class="players">
         <legend>Naši hráči <span id="pcount" class="muted"></span></legend>
@@ -1617,6 +1743,18 @@ document.addEventListener("click", async (e) => {
         break;
       case "profile": openProfileDialog(); break;
       case "changelog": openChangelogDialog(); break;
+      case "mview": state.mview = t.dataset.v === "liga" ? "liga" : "rounds"; render(); window.scrollTo(0, 0); break;
+      case "liga-reload": state.liga = { status: "idle", data: null, error: "" }; render(); break;
+      case "liga-cols": state.ligaAll = !state.ligaAll; render(); break;
+      case "liga-new-round": {
+        const d = state.liga.data;
+        const f = d?.fixtures?.[Number(t.dataset.i)];
+        if (!f) break;
+        const homeUs = normTeam(f.home) === normTeam(d.team);
+        const when = new Date(`${f.date}T12:00:00`);
+        openRoundDialog(null, { opponent: homeUs ? f.away : f.home, date: isNaN(when) ? undefined : when });
+        break;
+      }
       case "round-new": openRoundDialog(); break;
       case "round-edit": openRoundDialog(id); break;
       case "round-open": openRound(id); window.scrollTo(0, 0); break;

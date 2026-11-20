@@ -1,7 +1,16 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.11";
+export const VERSION = "0.12";
 
 export const CHANGELOG = [
+  {
+    version: "0.12",
+    date: "20. 11. 2026",
+    changes: [
+      "Liga ze sipky.org: v záložce Zápasy je nový přepínač Zápisy a Liga. V Lize je tabulka vaší skupiny se zvýrazněným naším týmem, naše pozice a naše další utkání.",
+      "Data se stahují automaticky čtyřikrát denně úlohou na GitHubu. Stahuje se jen týmová tabulka a rozpis, ne statistiky jednotlivých hráčů.",
+      "U našeho utkání je tlačítko Založit kolo, které předvyplní soupeře a datum. Když kolo už existuje, nabídne jeho otevření."
+    ]
+  },
   {
     version: "0.11",
     date: "20. 11. 2026",
