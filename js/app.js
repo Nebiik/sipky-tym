@@ -11,7 +11,7 @@ import {
 import { firebaseConfig, TEAM_NAME } from "./firebase-config.js";
 import { VERSION, CHANGELOG } from "./changelog.js";
 import {
-  GAMES, MAX_PLAYERS, POINTS_PER_WIN, drawSchedule, computeStandings, tournamentStatus, roundsOf
+  GAMES, MAX_PLAYERS, POINTS_PER_WIN, drawSchedule, computeStandings, tournamentStatus
 } from "./tournament.js";
 
 /* ---------- základ ---------- */
@@ -536,12 +536,15 @@ function winnersOf(t) {
   const { rows } = computeStandings(t.players || [], t.matches || [], t.results || {});
   return rows.filter((r) => r.rank === 1).map((r) => r.name);
 }
+const joinNames = (names) => names.length > 2
+  ? `${names.slice(0, -1).join(", ")} a ${names[names.length - 1]}`
+  : names.join(" a ");
 
 function tourCard(t) {
   const st = tournamentStatus(t);
   const label = st.state === "draft" ? "Příprava, čeká na losování"
     : st.state === "running" ? `Probíhá, odehráno ${st.played} z ${st.total}`
-    : `Dokončeno, vítěz ${winnersOf(t).join(" a ")}`;
+    : `Dokončeno, vítěz ${joinNames(winnersOf(t))}`;
   const pct = st.total ? Math.round((st.played / st.total) * 100) : 0;
   return `
     <button class="tour ${st.state}" data-action="tour-open" data-id="${t.id}">
@@ -587,44 +590,38 @@ function viewTournament(t) {
   }
 
   // tabulka
-  const { rows, anyLegs } = computeStandings(players, matches, results);
+  const { rows } = computeStandings(players, matches, results);
   if (st.state === "finished") {
-    html += `<p class="champion">🏆 Vítěz turnaje: <strong>${esc(winnersOf(t).join(" a "))}</strong></p>`;
+    const w = winnersOf(t);
+    html += `<p class="champion">🏆 ${w.length > 1 ? "Shoda na prvním místě" : "Vítěz turnaje"}: <strong>${esc(joinNames(w))}</strong></p>`;
   }
   html += `<h2>Tabulka</h2>
     <div class="tablewrap"><table class="standings">
-      <thead><tr><th>#</th><th>Hráč</th><th>Z</th><th>V</th><th>P</th>${anyLegs ? "<th>Legy</th>" : ""}<th>Body</th></tr></thead>
+      <thead><tr><th>#</th><th>Hráč</th><th>Z</th><th>V</th><th>P</th><th>Body</th></tr></thead>
       <tbody>${rows.map((r) => `
         <tr class="${r.rank === 1 && st.state === "finished" ? "first" : ""}">
-          <td>${st.played ? `${r.rank}.` : "–"}</td><td class="nm">${esc(r.name)}</td><td>${r.played}</td><td>${r.wins}</td><td>${r.losses}</td>
-          ${anyLegs ? `<td>${r.legsFor}:${r.legsAgainst}</td>` : ""}<td><b>${r.points}</b></td>
+          <td>${st.played ? `${r.rank}.` : "–"}</td><td class="nm">${esc(r.name)}</td><td>${r.played}</td><td>${r.wins}</td><td>${r.losses}</td><td><b>${r.points}</b></td>
         </tr>`).join("")}</tbody>
     </table></div>
-    <p class="muted legend">Z zápasy, V výhry, P prohry. Výhra = ${POINTS_PER_WIN} body.</p>`;
+    <p class="muted legend">Z zápasy, V výhry, P prohry. Výhra = ${POINTS_PER_WIN} body. Při shodě bodů rozhoduje vzájemný zápas.</p>`;
 
-  // zápasy po kolech
-  html += `<h2>Zápasy</h2><p class="muted">Odehráno ${st.played} z ${st.total}.${manage ? " Klepnutím na zápas zadáš výsledek." : ""}</p>`;
-  for (const [r, list] of roundsOf(matches)) {
-    const busy = new Set(list.flatMap((m) => [m.a, m.b]));
-    const bye = players.filter((p) => !busy.has(p.id)).map((p) => p.name);
-    html += `<section class="round"><h3>Kolo ${r}${bye.length ? ` <small class="muted">volno: ${esc(bye.join(", "))}</small>` : ""}</h3><div class="matches">`;
-    for (const m of list) {
-      const res = results[m.id];
-      const done = !!res?.winner;
-      const aWin = done && res.winner === m.a;
-      const bWin = done && res.winner === m.b;
-      const score = done && Number.isInteger(res.legsA) && Number.isInteger(res.legsB) ? `${res.legsA}:${res.legsB}` : done ? "✓" : "vs";
-      const inner = `
-        <span class="no">${m.no}</span>
-        <span class="side a ${aWin ? "win" : done ? "lose" : ""}">${esc(names.get(m.a) || "?")}</span>
-        <span class="score">${score}</span>
-        <span class="side b ${bWin ? "win" : done ? "lose" : ""}">${esc(names.get(m.b) || "?")}</span>`;
-      html += manage
-        ? `<button class="match ${done ? "done" : ""}" data-action="match" data-id="${t.id}" data-mid="${m.id}">${inner}</button>`
-        : `<div class="match ${done ? "done" : ""}">${inner}</div>`;
-    }
-    html += `</div></section>`;
-  }
+  // zápasy jeden za druhým
+  html += `<h2>Zápasy</h2><p class="muted">Odehráno ${st.played} z ${st.total}.${manage ? " Klepnutím na zápas zadáš vítěze." : ""}</p><div class="matches">`;
+  matches.forEach((m, i) => {
+    const res = results[m.id];
+    const done = !!res?.winner;
+    const aWin = done && res.winner === m.a;
+    const bWin = done && res.winner === m.b;
+    const inner = `
+      <span class="no">${i + 1}</span>
+      <span class="side a ${aWin ? "win" : done ? "lose" : ""}">${esc(names.get(m.a) || "?")}</span>
+      <span class="score">${done ? "✓" : "vs"}</span>
+      <span class="side b ${bWin ? "win" : done ? "lose" : ""}">${esc(names.get(m.b) || "?")}</span>`;
+    html += manage
+      ? `<button class="match ${done ? "done" : ""}" data-action="match" data-id="${t.id}" data-mid="${m.id}">${inner}</button>`
+      : `<div class="match ${done ? "done" : ""}">${inner}</div>`;
+  });
+  html += `</div>`;
   if (manage) {
     html += `<p class="redraw"><button class="link" data-action="tour-draw" data-id="${t.id}">Nalosovat znovu</button></p>`;
   }
@@ -811,20 +808,13 @@ function openMatchDialog(tid, mid) {
   const res = t.results?.[mid];
   $dlg.innerHTML = `
     <form id="matchForm" class="stack" data-tid="${tid}" data-mid="${mid}">
-      <h2>Kolo ${m.r}, výsledek zápasu</h2>
+      <h2>Kdo vyhrál?</h2>
       <p class="muted">${esc(GAMES[t.game] || "")}. Klepni na jméno vítěze.</p>
       <div class="duel">
-        <div class="duel-side">
-          <input type="number" name="legsA" min="0" max="99" inputmode="numeric" placeholder="legy" aria-label="Legy: ${esc(names.get(m.a))}" value="${Number.isInteger(res?.legsA) ? res.legsA : ""}">
-          <button type="submit" name="winner" value="${esc(m.a)}" class="btn ${res?.winner === m.a ? "primary" : ""}">${esc(names.get(m.a) || "?")}</button>
-        </div>
+        <button type="submit" name="winner" value="${esc(m.a)}" class="btn ${res?.winner === m.a ? "primary" : ""}">${esc(names.get(m.a) || "?")}</button>
         <span class="vs">vs</span>
-        <div class="duel-side">
-          <input type="number" name="legsB" min="0" max="99" inputmode="numeric" placeholder="legy" aria-label="Legy: ${esc(names.get(m.b))}" value="${Number.isInteger(res?.legsB) ? res.legsB : ""}">
-          <button type="submit" name="winner" value="${esc(m.b)}" class="btn ${res?.winner === m.b ? "primary" : ""}">${esc(names.get(m.b) || "?")}</button>
-        </div>
+        <button type="submit" name="winner" value="${esc(m.b)}" class="btn ${res?.winner === m.b ? "primary" : ""}">${esc(names.get(m.b) || "?")}</button>
       </div>
-      <p class="muted">Počet legů je nepovinný. Když ho vyplníš, použije se ve skóre v tabulce. Vyplň ho u obou hráčů, nebo u žádného.</p>
       <div class="actions">
         ${res ? `<button type="button" class="btn danger" data-dlg="mclear" data-tid="${tid}" data-mid="${mid}">Smazat výsledek</button>` : ""}
         <span class="spacer"></span>
@@ -1135,24 +1125,8 @@ document.addEventListener("submit", async (e) => {
     if (f.id === "matchForm") {
       const winner = e.submitter?.value;
       if (!winner) return;
-      const t = state.tournaments.find((x) => x.id === f.dataset.tid);
-      const m = t?.matches?.find((x) => x.id === f.dataset.mid);
-      if (!t || !m) return;
-      const rawA = String(fd.get("legsA") ?? "").trim();
-      const rawB = String(fd.get("legsB") ?? "").trim();
-      let legsA = null, legsB = null;
-      if (rawA !== "" || rawB !== "") {
-        if (rawA === "" || rawB === "") { toast("Vyplň legy u obou hráčů, nebo u žádného."); return; }
-        legsA = Number(rawA); legsB = Number(rawB);
-        if (!Number.isInteger(legsA) || !Number.isInteger(legsB) || legsA < 0 || legsB < 0) {
-          toast("Legy musí být celá čísla."); return;
-        }
-        const winnerLegs = winner === m.a ? legsA : legsB;
-        const loserLegs = winner === m.a ? legsB : legsA;
-        if (winnerLegs <= loserLegs) { toast("Vítěz musí mít víc legů než soupeř."); return; }
-      }
       await updateDoc(doc(db, "tournaments", f.dataset.tid), {
-        [`results.${f.dataset.mid}`]: { winner, legsA, legsB }
+        [`results.${f.dataset.mid}`]: { winner }
       });
       closeDialog();
       return;

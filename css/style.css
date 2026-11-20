@@ -255,8 +255,6 @@ main {
 .standings td:first-child { color: var(--dim); width: 2.2rem; }
 .standings tr.first td { background: rgba(212, 180, 106, .13); }
 .legend { font-size: .85rem; margin-top: .5rem; }
-.round { margin-top: 1.4rem; }
-.round h3 { margin-bottom: .6rem; }
 .matches { display: grid; gap: .45rem; }
 .match {
   display: grid; grid-template-columns: 1.6rem 1fr auto 1fr; align-items: center; gap: .5rem;
@@ -276,7 +274,15 @@ button.match:hover { border-color: var(--dim); }
 
 /* formulář turnaje */
 .check { display: flex; align-items: center; gap: .6rem; font-weight: 400; }
-.check input { width: 1.3rem; min-height: 0; height: 1.3rem; accent-color: var(--red); }
+.check input {
+  -webkit-appearance: none; appearance: none; flex: none;
+  width: 1.5rem; height: 1.5rem; min-height: 0; margin: 0; padding: 0;
+  border: 1.5px solid var(--dim); border-radius: 7px; background: var(--ink);
+}
+.check input:checked {
+  border-color: var(--red);
+  background: var(--red) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff7e6' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 80% no-repeat;
+}
 fieldset.players { display: block; }
 .chips { display: flex; flex-wrap: wrap; gap: .5rem; }
 .sel-links { display: flex; gap: 1.25rem; margin: .5rem 0; }
@@ -286,11 +292,9 @@ fieldset.players { display: block; }
   border: 1.5px solid var(--brass); border-radius: 999px; font-weight: 600; color: var(--cream);
 }
 .gchip button { background: none; border: 0; color: var(--dim); font-size: 1.3rem; line-height: 1; padding: 0 .55rem; min-height: 32px; }
-.duel { display: grid; grid-template-columns: 1fr auto 1fr; gap: .6rem; align-items: end; }
-.duel-side { display: grid; gap: .5rem; }
-.duel-side input { text-align: center; }
-.duel-side .btn { min-height: 58px; font-size: 1.05rem; overflow-wrap: anywhere; }
-.vs { color: var(--dim); padding-bottom: 1.1rem; }
+.duel { display: grid; gap: .5rem; }
+.duel .btn { min-height: 64px; font-size: 1.15rem; overflow-wrap: anywhere; }
+.vs { text-align: center; color: var(--dim); }
 
 /* přihlášení a hlášky */
 .login, .center { max-width: 400px; margin: 0 auto; padding: calc(8vh + env(safe-area-inset-top)) 1.25rem 3rem; }
@@ -310,12 +314,19 @@ fieldset.players { display: block; }
 .error { color: var(--red-text); min-height: 1.5em; margin-top: .75rem; }
 
 /* formuláře (písmo 16 px, ať iPhone při psaní nezoomuje) */
-.stack { display: grid; gap: .95rem; }
-label { display: grid; gap: .3rem; font-weight: 600; font-size: .92rem; }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: .95rem; }
+label { display: grid; gap: .3rem; min-width: 0; font-weight: 600; font-size: .92rem; }
 input, textarea, select {
   width: 100%; min-height: 46px; padding: .6rem .8rem; font: inherit; font-size: 1rem; font-weight: 400;
   color: var(--cream); background: var(--ink); border: 1.5px solid var(--line); border-radius: 10px;
 }
+input[type="date"], input[type="datetime-local"] {
+  -webkit-appearance: none; appearance: none;
+  display: block; width: 100%; min-width: 0; max-width: 100%; text-align: left; line-height: 1.2;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+input::-webkit-datetime-edit { padding: 0; }
 input::placeholder, textarea::placeholder { color: rgba(242, 232, 204, .4); }
 input:focus, textarea:focus, select:focus { border-color: var(--brass); outline: none; }
 select { width: auto; background: var(--panel-2); }

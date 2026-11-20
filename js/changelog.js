@@ -1,7 +1,18 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.6";
+export const VERSION = "0.7";
 
 export const CHANGELOG = [
+  {
+    version: "0.7",
+    date: "20. 11. 2026",
+    changes: [
+      "Po nalosování turnaje je rozpis jen seznam zápasů jeden za druhým, bez kol.",
+      "Zápas se zapisuje jedním klepnutím na vítěze. Legy jsou pryč.",
+      "Při shodě bodů v tabulce rozhoduje vzájemný zápas. Když ani ten nerozhodne, mají hráči stejné místo.",
+      "Zápasy jsou seřazené tak, aby při šesti a více hráčích nikdo nehrál dva zápasy hned po sobě.",
+      "Opraveno pole pro datum při zakládání turnaje a události na iPhonu (bylo posunuté a příliš široké). Nové zaškrtávátko u odvety."
+    ]
+  },
   {
     version: "0.6",
     date: "20. 11. 2026",

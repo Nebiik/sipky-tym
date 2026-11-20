@@ -19,8 +19,9 @@ export function shuffle(arr, rnd = Math.random) {
   return a;
 }
 
-// Rozpis metodou kruhu: v každém kole hraje každý nejvýš jednou, každá dvojice se potká právě jednou.
-// Při lichém počtu hráčů má v každém kole někdo volno. Odveta přidá druhou polovinu s prohozenými stranami.
+// Rozpis metodou kruhu: každá dvojice se potká právě jednou, při lichém počtu hráčů má v každém
+// kole někdo volno. Odveta přidá druhou polovinu s prohozenými stranami. V aplikaci se zápasy ukazují
+// jako jeden seznam, kola slouží jen k tomu, aby hráči měli mezi zápasy co nejrovnoměrnější pauzy.
 export function drawSchedule(playerIds, double = false, rnd = Math.random) {
   const ids = shuffle(playerIds, rnd);
   if (ids.length < 2) return [];
@@ -40,15 +41,31 @@ export function drawSchedule(playerIds, double = false, rnd = Math.random) {
     arr.splice(1, 0, arr.pop());
   }
   if (double) rounds.push(...rounds.map((rd) => rd.map(([a, b]) => [b, a])));
+
+  // Na přechodu mezi koly, pokud to jde, nezačínat zápasem, ve kterém hraje někdo z předchozího zápasu.
+  for (let r = 1; r < rounds.length; r++) {
+    const prevRound = rounds[r - 1];
+    const last = prevRound[prevRound.length - 1];
+    const cur = rounds[r];
+    if (!last || cur.length < 2) continue;
+    const clash = (p) => p.includes(last[0]) || p.includes(last[1]);
+    if (clash(cur[0])) {
+      const j = cur.findIndex((p) => !clash(p));
+      if (j > 0) [cur[0], cur[j]] = [cur[j], cur[0]];
+    }
+  }
+
   return rounds.flatMap((rd, ri) =>
     rd.map(([a, b], mi) => ({ id: `r${ri + 1}m${mi + 1}`, r: ri + 1, a, b })));
 }
 
+// Pořadí: 1. body, 2. body ze vzájemných zápasů hráčů se stejným počtem bodů. Když ani to nerozhodne,
+// mají hráči stejné místo (rozhodne rozstřel mimo aplikaci).
 export function computeStandings(players, matches, results) {
   const rows = new Map(players.map((p) => [p.id, {
-    id: p.id, name: p.name, played: 0, wins: 0, losses: 0, legsFor: 0, legsAgainst: 0, points: 0
+    id: p.id, name: p.name, played: 0, wins: 0, losses: 0, points: 0, h2h: 0
   }]));
-  let anyLegs = false;
+  const decided = [];
   for (const m of matches) {
     const res = results?.[m.id];
     if (!res || !res.winner) continue;
@@ -60,21 +77,26 @@ export function computeStandings(players, matches, results) {
     const lose = win === a ? b : a;
     win.wins++; lose.losses++;
     win.points += POINTS_PER_WIN;
-    if (Number.isInteger(res.legsA) && Number.isInteger(res.legsB)) {
-      anyLegs = true;
-      a.legsFor += res.legsA; a.legsAgainst += res.legsB;
-      b.legsFor += res.legsB; b.legsAgainst += res.legsA;
+    decided.push({ a: m.a, b: m.b, winner: win.id });
+  }
+  // vzájemné zápasy jen uvnitř skupiny se stejným počtem bodů
+  const groups = new Map();
+  for (const r of rows.values()) {
+    if (!groups.has(r.points)) groups.set(r.points, []);
+    groups.get(r.points).push(r.id);
+  }
+  for (const ids of groups.values()) {
+    if (ids.length < 2) continue;
+    const set = new Set(ids);
+    for (const d of decided) {
+      if (set.has(d.a) && set.has(d.b)) rows.get(d.winner).h2h += POINTS_PER_WIN;
     }
   }
   const list = [...rows.values()].sort((x, y) =>
-    y.points - x.points
-    || (y.legsFor - y.legsAgainst) - (x.legsFor - x.legsAgainst)
-    || y.legsFor - x.legsFor
-    || x.name.localeCompare(y.name, "cs"));
-  const same = (x, y) => x.points === y.points
-    && (x.legsFor - x.legsAgainst) === (y.legsFor - y.legsAgainst) && x.legsFor === y.legsFor;
+    y.points - x.points || y.h2h - x.h2h || x.name.localeCompare(y.name, "cs"));
+  const same = (x, y) => x.points === y.points && x.h2h === y.h2h;
   list.forEach((row, i) => { row.rank = i > 0 && same(list[i - 1], row) ? list[i - 1].rank : i + 1; });
-  return { rows: list, anyLegs };
+  return { rows: list };
 }
 
 export function tournamentStatus(t) {

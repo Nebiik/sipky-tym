@@ -3,6 +3,14 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.7 (20. 11. 2026)
+
+- Po nalosování turnaje je rozpis jen seznam zápasů jeden za druhým, bez kol.
+- Zápas se zapisuje jedním klepnutím na vítěze. Legy jsou pryč.
+- Při shodě bodů v tabulce rozhoduje vzájemný zápas. Když ani ten nerozhodne, mají hráči stejné místo.
+- Zápasy jsou seřazené tak, aby při šesti a více hráčích nikdo nehrál dva zápasy hned po sobě.
+- Opraveno pole pro datum při zakládání turnaje a události na iPhonu (bylo posunuté a příliš široké). Nové zaškrtávátko u odvety.
+
 ## Verze 0.6 (20. 11. 2026)
 
 - Nová záložka Turnaje: založení turnaje, výběr hráčů (členové i hosté bez účtu) a hry (501 DO, 501 DI/DO, 301 DO, 301 DI/DO, Kriket).
