@@ -9,6 +9,7 @@ import {
   updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig, TEAM_NAME } from "./firebase-config.js";
+import { VERSION, CHANGELOG } from "./changelog.js";
 
 /* ---------- základ ---------- */
 
@@ -493,7 +494,8 @@ function viewTeam() {
         </div>
       </div>`;
   }).join("")}</div>
-  <p class="logout"><button class="btn" data-action="logout">Odhlásit se</button></p>`;
+  <p class="logout"><button class="btn" data-action="logout">Odhlásit se</button></p>
+  <p class="version"><button class="link" data-action="changelog">Verze ${esc(VERSION)}, co je nového</button></p>`;
 
   return html;
 }
@@ -545,6 +547,18 @@ function openNoteDialog(id) {
         <button type="submit" class="btn primary">Uložit poznámku</button>
       </div>
     </form>`;
+  $dlg.showModal();
+}
+
+function openChangelogDialog() {
+  $dlg.innerHTML = `
+    <div class="changes">
+      <h2>Historie verzí</h2>
+      ${CHANGELOG.map((v) => `
+        <h3>Verze ${esc(v.version)}<span class="date-note">${esc(v.date)}</span></h3>
+        <ul>${v.changes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`).join("")}
+      <div class="actions"><span class="spacer"></span><button type="button" class="btn" data-dlg="close">Zavřít</button></div>
+    </div>`;
   $dlg.showModal();
 }
 
@@ -641,6 +655,7 @@ document.addEventListener("click", async (e) => {
         openNoteDialog(id);
         break;
       case "rename": openRenameDialog(); break;
+      case "changelog": openChangelogDialog(); break;
       case "approve":
         await updateDoc(doc(db, "users", uid), { role: "member" });
         toast("Člen schválený.");
