@@ -28,6 +28,7 @@ const state = {
   user: null,          // Firebase Auth uživatel
   me: null,            // můj dokument z kolekce users
   users: new Map(),    // uid -> dokument
+  private: new Map(),  // uid -> {email}, jen pro správce
   events: [],          // seřazeno podle startsAt
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
   view: "events",
@@ -40,6 +41,7 @@ const state = {
 let auth, db;
 let authUnsubs = [];
 let dataUnsubs = [];
+let privUnsub = null;
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -143,10 +145,15 @@ async function onAuth(user) {
         .trim().slice(0, 40) || "Hráč";
       await setDoc(ref, {
         displayName: name,
-        email: user.email || "",
         role: "pending",
         createdAt: serverTimestamp()
       });
+    }
+    // E-mail je zvlášť, čte ho jen jeho majitel a správce.
+    const pref = doc(db, "userPrivate", user.uid);
+    const psnap = await getDoc(pref);
+    if (!psnap.exists() && user.email) {
+      await setDoc(pref, { email: user.email });
     }
     state.pendingName = null;
   } catch (e) {
@@ -158,6 +165,7 @@ async function onAuth(user) {
     state.me = s.exists() ? { id: s.id, ...s.data() } : null;
     if (state.me && isMemberRole(state.me.role)) startData();
     else stopData();
+    syncPrivate();
     render();
   }, (e) => renderFatal("Nepodařilo se načíst tvůj účet.", e)));
 }
@@ -189,9 +197,25 @@ function startData() {
   }, onErr));
 }
 
+function syncPrivate() {
+  const admin = state.me?.role === "admin";
+  if (admin && !privUnsub) {
+    privUnsub = onSnapshot(collection(db, "userPrivate"), (s) => {
+      state.private = new Map(s.docs.map((d) => [d.id, d.data()]));
+      render();
+    }, (e) => toast(errMsg(e)));
+  } else if (!admin && privUnsub) {
+    privUnsub();
+    privUnsub = null;
+    state.private = new Map();
+  }
+}
+
 function stopData() {
   dataUnsubs.forEach((u) => u());
   dataUnsubs = [];
+  if (privUnsub) { privUnsub(); privUnsub = null; }
+  state.private = new Map();
   state.dataOn = false;
   state.users = new Map();
   state.events = [];
@@ -401,7 +425,7 @@ function viewTeam() {
   if (admin && pending.length) {
     html += `<h2>Čekají na schválení</h2><div class="rows">${pending.map((u) => `
       <div class="row">
-        <div><strong>${esc(u.displayName)}</strong><br><small class="muted">${esc(u.email)}</small></div>
+        <div><strong>${esc(u.displayName)}</strong><br><small class="muted">${esc(state.private.get(u.id)?.email || "")}</small></div>
         <div class="row-actions">
           <button class="btn primary" data-action="approve" data-uid="${u.id}">Schválit</button>
           <button class="btn" data-action="reject" data-uid="${u.id}">Odmítnout</button>
@@ -415,7 +439,7 @@ function viewTeam() {
       <div class="row">
         <div>
           <strong>${esc(u.displayName)}</strong>${self ? ` <small class="muted">(ty)</small>` : ""}
-          ${admin && u.email ? `<br><small class="muted">${esc(u.email)}</small>` : ""}
+          ${admin && state.private.get(u.id)?.email ? `<br><small class="muted">${esc(state.private.get(u.id).email)}</small>` : ""}
         </div>
         <div class="row-actions">
           ${admin && !self
@@ -585,6 +609,7 @@ document.addEventListener("click", async (e) => {
         const q = action === "reject" ? "Odmítnout" : "Odebrat z týmu";
         if (!confirm(`${q}: ${u?.displayName || "uživatel"}?`)) break;
         await deleteDoc(doc(db, "users", uid));
+        await deleteDoc(doc(db, "userPrivate", uid));
         break;
       }
     }
