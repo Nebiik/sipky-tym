@@ -13,6 +13,11 @@ import { VERSION, CHANGELOG } from "./changelog.js";
 import {
   GAMES, MAX_PLAYERS, POINTS_PER_WIN, drawSchedule, computeStandings, tournamentStatus
 } from "./tournament.js";
+import {
+  START, MISS, other, dartLabel, newLeg, remaining, turnOf, needsBull, curTotal, curRemaining,
+  addDart, checkOpp, addOpp, endLeg, undo, isEmptyLeg, crossOf, sideStats, tally, matchState,
+  roundSummary, playerTotals
+} from "./scoring.js";
 
 /* ---------- základ ---------- */
 
@@ -36,13 +41,20 @@ const state = {
   events: [],          // seřazeno podle startsAt
   tournaments: [],     // nejnovější první
   tid: null,           // otevřený turnaj
+  rounds: [],          // ligová kola, nejnovější první
+  rid: null,           // otevřené kolo
+  matches: new Map(),  // zápasy otevřeného kola: číslo zápasu -> dokument
+  mslot: null,         // otevřený zápas
+  mult: 1,             // zvolený násobek (1 single, 2 double, 3 triple)
+  oppInput: "",        // zbytek soupeře, který se právě píše
+  oppUsed: 3,          // šipek soupeře při zavření
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
   view: "events",
   showPast: false,
   expanded: new Set(),
   pendingName: null,
   dataOn: false,
-  ready: { users: false, events: false, rsvps: false, tournaments: false },
+  ready: { users: false, events: false, rsvps: false, tournaments: false, rounds: false, matches: false },
   privChecked: false,
   creating: false
 };
@@ -233,6 +245,16 @@ function startData() {
     toast(errMsg(e));
   }));
 
+  dataUnsubs.push(onSnapshot(query(collection(db, "rounds"), orderBy("date", "desc")), (s) => {
+    state.rounds = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    state.ready.rounds = true;
+    render();
+  }, (e) => {
+    state.ready.rounds = true;
+    render();
+    toast(errMsg(e));
+  }));
+
   dataUnsubs.push(onSnapshot(collectionGroup(db, "rsvps"), (s) => {
     const m = new Map();
     s.docs.forEach((d) => {
@@ -271,7 +293,9 @@ function stopData() {
   state.rsvps = new Map();
   state.tournaments = [];
   state.tid = null;
-  state.ready = { users: false, events: false, rsvps: false, tournaments: false };
+  state.rounds = [];
+  closeRound();
+  state.ready = { users: false, events: false, rsvps: false, tournaments: false, rounds: false, matches: false };
 }
 
 /* ---------- vykreslování ---------- */
@@ -284,6 +308,7 @@ const svgIcon = (inner) =>
   `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
 const ICONS = {
   events: svgIcon('<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+  matches: svgIcon('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>'),
   tournaments: svgIcon('<path d="M8 4h8v5a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M9 20h6M10 17h4"/>'),
   team: svgIcon('<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17.2" cy="9.5" r="2.4"/><path d="M17 14.2c2.2.2 3.7 1.6 4.2 4.3"/>')
 };
@@ -313,10 +338,12 @@ function draw() {
   const r = state.ready;
   const ok = state.view === "team" ? r.users
     : state.view === "tournaments" ? r.users && r.tournaments
+    : state.view === "matches" ? r.users && r.rounds
     : r.users && r.events && r.rsvps;
   const body = ok
-    ? (state.view === "team" ? viewTeam() : state.view === "tournaments" ? viewTournaments() : viewEvents())
+    ? (state.view === "team" ? viewTeam() : state.view === "tournaments" ? viewTournaments() : state.view === "matches" ? viewMatches() : viewEvents())
     : `<p class="muted">Načítám…</p>`;
+  document.body.classList.toggle("scoring", ok && state.view === "matches" && isLiveScoring());
   $app.innerHTML = shell(body);
   window.scrollTo(0, y);
 }
@@ -383,7 +410,14 @@ function renderPending() {
     </main>`;
 }
 
+const isLiveScoring = () => {
+  if (state.view !== "matches" || !state.rid || !state.mslot) return false;
+  const m = state.matches.get(state.mslot);
+  return !!m && m.kind === "single" && m.status !== "done";
+};
+
 function shell(inner) {
+  if (isLiveScoring()) return `<main class="live">${inner}</main>`;
   const admin = state.me.role === "admin";
   const pending = admin ? [...state.users.values()].filter((u) => u.role === "pending").length : 0;
   const tab = (v, label) => `
@@ -401,7 +435,7 @@ function shell(inner) {
     </header>
     <main>${inner}</main>
     <nav class="tabbar" aria-label="Hlavní menu"><div class="tabbar-in">
-      ${tab("events", "Události")}${tab("tournaments", "Turnaje")}${tab("team", "Tým")}
+      ${tab("events", "Události")}${tab("tournaments", "Turnaje")}${tab("matches", "Zápasy")}${tab("team", "Tým")}
     </div></nav>`;
 }
 
@@ -628,6 +662,353 @@ function viewTournament(t) {
   return html;
 }
 
+/* ----- zápasy: ligová kola ----- */
+
+const SLOT_COUNT = 18;
+const slotKind = (n) => (n === 9 ? "team501" : n === 10 ? "cricket" : "single");
+const KIND_LABEL = { team501: "Týmovka 501", cricket: "Kriket" };
+const curRound = () => state.rounds.find((x) => x.id === state.rid);
+const canManageRound = (r) => state.me.role === "admin" || r.createdBy === state.user.uid;
+const fmtAvg = (x) => x.toLocaleString("cs-CZ", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const crossMark = (score) => { const c = crossOf(score); return c ? ` <span class="xmark">${"✚".repeat(c)}</span>` : ""; };
+const crossText = (st) => `${st.c95} / ${st.c133} / ${st.c170}`;
+
+let matchesUnsub = null;
+
+function openRound(id) {
+  closeRound();
+  state.rid = id;
+  state.ready.matches = false;
+  matchesUnsub = onSnapshot(collection(db, "rounds", id, "matches"), (s) => {
+    state.matches = new Map(s.docs.map((d) => [d.data().slot, { id: d.id, ...d.data() }]));
+    state.ready.matches = true;
+    render();
+  }, (e) => {
+    state.ready.matches = true;
+    render();
+    toast(errMsg(e));
+  });
+}
+
+function closeRound() {
+  if (matchesUnsub) { matchesUnsub(); matchesUnsub = null; }
+  state.rid = null;
+  state.mslot = null;
+  state.matches = new Map();
+  state.oppInput = "";
+  state.ready.matches = false;
+}
+
+function viewMatches() {
+  if (state.rid && !curRound()) closeRound();   // kolo mezitím někdo smazal
+  if (!state.rid) return viewRounds();
+  const r = curRound();
+  if (!state.ready.matches) return `<p class="muted">Načítám zápasy…</p>`;
+  if (state.mslot) {
+    const m = state.matches.get(state.mslot);
+    if (m && m.kind === "single") return m.status === "done" ? viewMatchSummary(r, m) : viewScoring(r, m);
+    state.mslot = null;
+  }
+  return viewRound(r);
+}
+
+function viewRounds() {
+  let html = `<div class="bar"><h1>Zápasy</h1><button class="btn primary" data-action="round-new">Nové kolo</button></div>`;
+  if (!state.rounds.length) {
+    html += `<div class="empty"><p><strong>Zatím žádné ligové kolo.</strong></p><p>Založ kolo, vyber naše hráče a zapisuj zápasy šipku po šipce. Křížky a průměry se spočítají samy.</p></div>`;
+  } else {
+    html += `<div class="list">${state.rounds.map(roundCard).join("")}</div>`;
+  }
+  return html;
+}
+
+function roundCard(r) {
+  const played = r.played || 0;
+  const pct = Math.round((played / SLOT_COUNT) * 100);
+  return `
+    <button class="tour ${played >= SLOT_COUNT ? "finished" : played ? "running" : "draft"}" data-action="round-open" data-id="${r.id}">
+      <span class="tour-head"><strong class="tour-name">${esc(TEAM_NAME)} vs. ${esc(r.opponent)}</strong></span>
+      <span class="muted">${dateText(r.date)}</span>
+      <span class="round-score">${r.ourWins || 0} : ${r.oppWins || 0}</span>
+      <span class="tour-state">Odehráno ${played} z ${SLOT_COUNT}</span>
+      <span class="meter" aria-hidden="true"><i class="y" style="flex-grow:${pct}"></i><i style="flex-grow:${100 - pct}"></i></span>
+    </button>`;
+}
+
+function slotRow(n, nextN) {
+  const m = state.matches.get(n);
+  const kind = slotKind(n);
+  const res = m?.result;
+  let name, right, cls = "";
+  if (kind !== "single") {
+    name = KIND_LABEL[kind];
+    right = m ? `${res.our} : ${res.opp}` : `<span class="muted">zapsat výsledek</span>`;
+    if (m && res.our > res.opp) cls = "won"; else if (m && res.opp > res.our) cls = "lost";
+  } else if (!m) {
+    name = `<span class="muted">Volný zápas</span>`;
+    right = n === nextN ? `<span class="chipnext">další</span>` : "";
+  } else if (m.status === "done") {
+    name = `${esc(m.ourName)} <span class="muted">vs.</span> ${esc(m.oppName)}`;
+    right = `${res.our} : ${res.opp}`;
+    cls = res.our > res.opp ? "won" : res.opp > res.our ? "lost" : "";
+  } else {
+    const t = tally(m.legs || []);
+    name = `${esc(m.ourName)} <span class="muted">vs.</span> ${esc(m.oppName)}`;
+    right = `<span class="chiplive">hraje se ${t.our}:${t.opp}</span>`;
+  }
+  return `
+    <button class="slot ${cls} ${n === nextN && !m ? "next" : ""}" data-action="slot" data-n="${n}">
+      <span class="no">${n}</span><span class="slot-name">${name}</span><span class="slot-res">${right}</span>
+    </button>`;
+}
+
+function viewRound(r) {
+  const all = [...state.matches.values()];
+  const sum = roundSummary(all);
+  const manage = canManageRound(r);
+  const nextN = Array.from({ length: SLOT_COUNT }, (_, i) => i + 1).find((n) => !state.matches.get(n));
+
+  let html = `
+    <p class="crumb"><button class="link" data-action="round-back">‹ Všechna kola</button></p>
+    <div class="bar">
+      <div><h1>vs. ${esc(r.opponent)}</h1><p class="muted meta">${dateText(r.date)}</p></div>
+      ${manage ? `<button class="btn" data-action="round-edit" data-id="${r.id}">Upravit</button>` : ""}
+    </div>
+    <div class="roundscore">
+      <span class="rs-team">${esc(TEAM_NAME)}</span>
+      <span class="rs-num">${sum.ourWins} : ${sum.oppWins}</span>
+      <span class="rs-team">${esc(r.opponent)}</span>
+    </div>
+    <h2>Zápasy</h2>
+    <div class="slots">${Array.from({ length: SLOT_COUNT }, (_, i) => slotRow(i + 1, nextN)).join("")}</div>`;
+
+  const singles = all.filter((m) => m.kind === "single" && (m.legs || []).length)
+    .sort((a, b) => a.slot - b.slot);
+  if (singles.length) {
+    const totals = playerTotals(all);
+    html += `<h2>Naši hráči</h2>
+      <div class="tablewrap"><table class="standings small">
+        <thead><tr><th>Hráč</th><th>Zápasy</th><th>Legy</th><th>Průměr</th><th>95+</th><th>133+</th><th>170+</th><th>180</th></tr></thead>
+        <tbody>${totals.map((p) => `<tr><td class="nm">${esc(p.name)}</td><td>${p.won}:${p.lost}</td><td>${p.legsW}:${p.legsL}</td><td>${fmtAvg(p.avg)}</td><td>${p.c95}</td><td>${p.c133}</td><td>${p.c170}</td><td>${p.n180}</td></tr>`).join("")}</tbody>
+      </table></div>
+      <h2>Přehled pro zápis do ligy</h2>
+      <p class="muted">Křížky obou stran z každého zápasu: 95+, 133+ a 170+.</p>
+      <div class="tablewrap"><table class="standings small league">
+        <thead>
+          <tr><th rowspan="2">#</th><th rowspan="2">Hráč</th><th rowspan="2">Soupeř</th><th rowspan="2">Legy</th><th colspan="3">Naše</th><th colspan="3">Soupeř</th></tr>
+          <tr><th>95+</th><th>133+</th><th>170+</th><th>95+</th><th>133+</th><th>170+</th></tr>
+        </thead>
+        <tbody>${singles.map((m) => {
+          const a = sideStats(m.legs, "our"), b = sideStats(m.legs, "opp"), t = tally(m.legs);
+          return `<tr><td>${m.slot}</td><td class="nm">${esc(m.ourName)}</td><td class="nm">${esc(m.oppName)}</td><td>${t.our}:${t.opp}</td><td>${a.c95}</td><td>${a.c133}</td><td>${a.c170}</td><td>${b.c95}</td><td>${b.c133}</td><td>${b.c170}</td></tr>`;
+        }).join("")}</tbody>
+      </table></div>`;
+  }
+  return html;
+}
+
+/* ----- zápis jednoho zápasu ----- */
+
+function visitsTable(leg) {
+  const our = leg.visits.filter((v) => v.by === "our");
+  const opp = leg.visits.filter((v) => v.by === "opp");
+  const n = Math.max(our.length, opp.length);
+  if (!n) return "";
+  const cell = (v, withDarts) => v
+    ? `<td>${v.bust ? `<span class="bust">přehozeno</span>` : v.score}${v.bust ? "" : crossMark(v.score)}${withDarts && v.darts ? `<small class="muted darts">${v.darts.map(dartLabel).join(" ")}</small>` : ""}</td><td class="rm">${v.rem}</td>`
+    : `<td></td><td></td>`;
+  let rows = "";
+  for (let i = n - 1; i >= 0; i--) rows += `<tr><td class="rn">${i + 1}</td>${cell(our[i], true)}${cell(opp[i], false)}</tr>`;
+  return `<div class="tablewrap"><table class="visits">
+    <thead><tr><th>Kolo</th><th>Naše</th><th>Zbývá</th><th>Soupeř</th><th>Zbývá</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function dartPad() {
+  const mults = [[1, "Single"], [2, "Double"], [3, "Triple"]];
+  return `
+    <div class="pad">
+      <div class="mults">${mults.map(([v, l]) => `<button class="mult ${state.mult === v ? "on" : ""}" data-action="mult" data-v="${v}">${l}</button>`).join("")}</div>
+      <div class="nums">${Array.from({ length: 20 }, (_, i) => `<button class="num" data-action="dart" data-dn="${i + 1}">${i + 1}</button>`).join("")}</div>
+      <div class="specials">
+        <button class="num wide" data-action="dart" data-dn="0" data-dm="1">Vedle</button>
+        <button class="num wide" data-action="dart" data-dn="25" data-dm="1">Bull 25</button>
+        <button class="num wide" data-action="dart" data-dn="25" data-dm="2">Bullseye 50</button>
+      </div>
+    </div>`;
+}
+
+function oppPad(leg, m) {
+  const prev = remaining(leg, "opp");
+  const raw = state.oppInput;
+  const val = raw === "" ? null : Number(raw);
+  const chk = val === null ? null : checkOpp(leg, val);
+  let preview = `<span class="muted">Zadej, kolik soupeři zbývá po jeho kole.</span>`;
+  if (chk && chk.ok) {
+    preview = val === 0
+      ? `Soupeř zavřel z ${prev}.`
+      : `Soupeř hodil <strong>${chk.score}</strong>${crossMark(chk.score)}`;
+  } else if (chk) {
+    preview = `<span class="err">${esc(chk.error)}</span>`;
+  }
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((k) => `<button class="num" data-action="opp-key" data-k="${k}">${k}</button>`).join("");
+  return `
+    <div class="oppdisp">
+      <span class="was">bylo ${prev}</span>
+      <span class="val">${raw === "" ? "–" : esc(raw)}</span>
+    </div>
+    <p class="preview">${preview}</p>
+    ${raw === "0" ? `<div class="usedrow"><span>Šipek na zavření</span>${[1, 2, 3].map((u) => `<button class="mult ${state.oppUsed === u ? "on" : ""}" data-action="opp-used" data-u="${u}">${u}</button>`).join("")}</div>` : ""}
+    <div class="keypad">
+      ${keys}
+      <button class="num" data-action="opp-del" aria-label="Smazat číslici">⌫</button>
+      <button class="num" data-action="opp-key" data-k="0">0</button>
+      <button class="num ok" data-action="opp-ok" ${chk && chk.ok ? "" : "disabled"}>Uložit</button>
+    </div>
+    <button class="btn wide ghost" data-action="opp-same">Beze změny (přehozeno nebo vedle)</button>`;
+}
+
+function viewScoring(r, m) {
+  const legs = m.legs || [];
+  const ms = matchState(m);
+  const last = legs[legs.length - 1];
+  const inLeg = !!last && !last.winner;
+  const fresh = !last || (last.winner && !ms.decided);
+  const turn = inLeg ? turnOf(last) : null;
+  const so = sideStats(legs, "our");
+  const sp = sideStats(legs, "opp");
+  const remShow = (side) => fresh ? START
+    : inLeg && side === "our" ? curRemaining(last) : remaining(last, side);
+  const nm = (side) => (side === "our" ? m.ourName : m.oppName);
+  const legWord = (n) => (n === 1 ? "vítězný leg" : n < 5 ? "vítězné legy" : "vítězných legů");
+
+  let status = "";
+  if (inLeg) status = `Leg ${legs.length}, začíná ${esc(nm(last.starter))}.`;
+  else if (last) status = `Leg ${legs.length} vyhrál ${esc(nm(last.winner))}.`;
+
+  const board = `
+    <div class="board">
+      ${["our", "opp"].map((side) => `
+        <div class="bside ${side} ${turn === side ? "turn" : ""}">
+          <div class="bname">${esc(nm(side))}</div>
+          <div class="brem">${remShow(side)}</div>
+          <div class="bmeta">legy ${side === "our" ? ms.our : ms.opp}, průměr ${fmtAvg((side === "our" ? so : sp).avg)}</div>
+        </div>`).join("")}
+    </div>
+    <p class="statusline">${status}</p>`;
+
+  let panel = "";
+  if (ms.decided && last?.winner) {
+    panel = `
+      <div class="panel">
+        <h2>Zápas vyhrál ${esc(nm(ms.winner))}</h2>
+        <p class="muted">Výsledek v legách ${ms.our} : ${ms.opp}. Když je něco špatně, vrať poslední krok.</p>
+        <button class="btn primary wide" data-action="match-finish">Uložit zápas</button>
+      </div>`;
+  } else if (fresh) {
+    const suggest = last ? other(last.starter) : null;
+    panel = `
+      <div class="panel">
+        <h2>${last ? "Kdo začíná další leg?" : "Kdo začíná leg?"}</h2>
+        <p class="muted">${last ? "Střídá se, předvyplněno je správně." : "Začíná ten, kdo byl blíž středu."}</p>
+        <div class="duel">
+          <button class="btn ${suggest === "our" ? "primary" : ""}" data-action="leg-start" data-who="our">${esc(nm("our"))}</button>
+          <button class="btn ${suggest === "opp" ? "primary" : ""}" data-action="leg-start" data-who="opp">${esc(nm("opp"))}</button>
+        </div>
+      </div>`;
+  } else if (needsBull(last)) {
+    panel = `
+      <div class="panel">
+        <h2>Hází se na středy</h2>
+        <p class="muted">Uplynulo ${15} kol. Klepni na vítěze legu.</p>
+        <div class="duel">
+          <button class="btn" data-action="leg-win" data-who="our">${esc(nm("our"))}</button>
+          <button class="btn" data-action="leg-win" data-who="opp">${esc(nm("opp"))}</button>
+        </div>
+      </div>`;
+  } else if (turn === "our") {
+    const cur = last.cur;
+    panel = `
+      <div class="panel">
+        <div class="curvisit">
+          ${[0, 1, 2].map((i) => `<span class="dart ${cur[i] ? "" : "empty"}">${cur[i] ? dartLabel(cur[i]) : "–"}</span>`).join("")}
+          <span class="curtotal">= ${curTotal(last)}</span>
+          <button class="undo" data-action="match-undo" aria-label="Vrátit poslední šipku"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+        </div>
+        ${dartPad()}
+      </div>`;
+  } else {
+    panel = `<div class="panel"><div class="opphead"><h2>${esc(nm("opp"))}, kolik zbývá?</h2><button class="undo" data-action="match-undo" aria-label="Vrátit poslední krok"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button></div>${oppPad(last, m)}</div>`;
+  }
+
+  const hasHistory = legs.length > 0;
+  const tools = `
+    <div class="tools">
+      ${hasHistory ? `<button class="btn" data-action="match-undo">Vrátit poslední</button>` : ""}
+      ${inLeg ? `<details class="manual"><summary>Rozhodnout leg ručně</summary>
+        <div class="duel">
+          <button class="btn" data-action="leg-win" data-who="our">Vyhrál ${esc(nm("our"))}</button>
+          <button class="btn" data-action="leg-win" data-who="opp">Vyhrál ${esc(nm("opp"))}</button>
+        </div></details>` : ""}
+    </div>`;
+
+  const hist = last ? `<h2>Kola ${legs.length > 1 ? `v legu ${legs.length}` : ""}</h2>${visitsTable(last) || `<p class="muted">Zatím nic.</p>`}` : "";
+
+  return `
+    <div class="scorebar">
+      <button class="link" data-action="match-back" aria-label="Zpět do kola vs. ${esc(r.opponent)}">‹ Kolo</button>
+      <strong>Zápas ${m.slot}</strong>
+      <span class="muted">na ${m.legsToWin} ${legWord(m.legsToWin)}</span>
+    </div>
+    ${board}${panel}${tools}${hist}`;
+}
+
+function viewMatchSummary(r, m) {
+  const legs = m.legs || [];
+  const ms = matchState(m);
+  const a = sideStats(legs, "our");
+  const b = sideStats(legs, "opp");
+  const res = m.result || { our: ms.our, opp: ms.opp };
+  const winner = res.our > res.opp ? "our" : res.opp > res.our ? "opp" : null;
+  const row = (label, x, y) => `<tr><td>${x}</td><th>${label}</th><td>${y}</td></tr>`;
+  const dash = (v) => (v === null ? "–" : v);
+  const manage = canManageRound(r);
+  return `
+    <p class="crumb"><button class="link" data-action="match-back">‹ Kolo vs. ${esc(r.opponent)}</button></p>
+    <div class="matchhead"><h1>Zápas ${m.slot}</h1><span class="muted">${legs.length} ${legs.length === 1 ? "leg" : legs.length < 5 ? "legy" : "legů"}</span></div>
+    <div class="result">
+      <span class="rname ${winner === "our" ? "win" : ""}">${esc(m.ourName)}</span>
+      <span class="rnum">${res.our} : ${res.opp}</span>
+      <span class="rname ${winner === "opp" ? "win" : ""}">${esc(m.oppName)}</span>
+    </div>
+    <h2>Statistika</h2>
+    <div class="tablewrap"><table class="stats">
+      <tbody>
+        ${row("Legy", ms.our, ms.opp)}
+        ${row("Průměr", fmtAvg(a.avg), fmtAvg(b.avg))}
+        ${row("Šipky", a.darts, b.darts)}
+        ${row("Nejlepší leg (šipek)", dash(a.bestLeg), dash(b.bestLeg))}
+        ${row("Nejvyšší kolo", a.highest, b.highest)}
+        ${row("Nejvyšší zavření", a.highOut || "–", b.highOut || "–")}
+        ${row("180", a.n180, b.n180)}
+        ${row("Křížky 95+ ✚", a.c95, b.c95)}
+        ${row("Křížky 133+ ✚✚", a.c133, b.c133)}
+        ${row("Křížky 170+ ✚✚✚", a.c170, b.c170)}
+      </tbody>
+    </table></div>
+    <p class="muted legend">Křížek se počítá za nejvyšší pásmo kola: 95 až 132 jeden, 133 až 169 dva, 170 a víc tři.</p>
+    <h2>Legy</h2>
+    ${legs.map((leg, i) => `
+      <details class="legbox">
+        <summary>Leg ${i + 1}, vyhrál ${esc(leg.winner === "our" ? m.ourName : m.oppName)}${leg.end === "bull" ? " (středy)" : ""}</summary>
+        ${visitsTable(leg)}
+      </details>`).join("")}
+    <div class="tools">
+      <button class="btn" data-action="match-reopen">Znovu otevřít zápis</button>
+      ${manage ? `<button class="btn danger" data-action="match-delete">Smazat zápas</button>` : ""}
+    </div>`;
+}
+
 /* ----- tým ----- */
 
 function viewTeam() {
@@ -733,7 +1114,7 @@ let dlgGuests = [];
 function updatePlayerCount() {
   const el = document.getElementById("pcount");
   if (!el) return;
-  const n = document.querySelectorAll("#tourForm input[name=member]:checked").length + dlgGuests.length;
+  const n = document.querySelectorAll("#dlg input[name=member]:checked").length + dlgGuests.length;
   el.textContent = `(${n} z ${MAX_PLAYERS})`;
 }
 
@@ -749,7 +1130,7 @@ function addGuest() {
   const input = document.getElementById("guestName");
   const name = (input?.value || "").trim().slice(0, 30);
   if (!name) return;
-  const members = document.querySelectorAll("#tourForm input[name=member]:checked").length;
+  const members = document.querySelectorAll("#dlg input[name=member]:checked").length;
   if (members + dlgGuests.length >= MAX_PLAYERS) { toast(`Nejvíc ${MAX_PLAYERS} hráčů.`); return; }
   dlgGuests.push({ id: "g" + Date.now().toString(36) + dlgGuests.length, name });
   input.value = "";
@@ -819,6 +1200,98 @@ function openMatchDialog(tid, mid) {
         ${res ? `<button type="button" class="btn danger" data-dlg="mclear" data-tid="${tid}" data-mid="${mid}">Smazat výsledek</button>` : ""}
         <span class="spacer"></span>
         <button type="button" class="btn" data-dlg="close">Zavřít</button>
+      </div>
+    </form>`;
+  $dlg.showModal();
+}
+
+function openRoundDialog(id) {
+  const r = id ? state.rounds.find((x) => x.id === id) : null;
+  dlgGuests = r ? (r.ourPlayers || []).filter((p) => !p.uid).map((p) => ({ id: p.id, name: p.name })) : [];
+  const selected = new Set(r ? (r.ourPlayers || []).filter((p) => p.uid).map((p) => p.uid) : []);
+  const members = [...state.users.values()].filter((u) => isMemberRole(u.role)).sort(byName);
+  const d = r ? r.date.toDate() : new Date();
+  const dateVal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  $dlg.innerHTML = `
+    <form id="roundForm" class="stack" data-id="${r?.id || ""}">
+      <h2>${r ? "Upravit kolo" : "Nové ligové kolo"}</h2>
+      <label>Soupeř<input name="opponent" required maxlength="60" placeholder="Např. Double Trouble Brno B" value="${esc(r?.opponent || "")}"></label>
+      <label>Datum<input type="date" name="date" required value="${dateVal}"></label>
+      <fieldset class="players">
+        <legend>Naši hráči <span id="pcount" class="muted"></span></legend>
+        <div class="chips">${members.map((u) => `
+          <label class="chip"><input type="checkbox" name="member" value="${u.id}" ${selected.has(u.id) ? "checked" : ""}><span>${esc(u.displayName)}</span></label>`).join("")}</div>
+        <p class="sel-links"><button type="button" class="link" data-dlg="selall">Vybrat všechny</button> <button type="button" class="link" data-dlg="selnone">Zrušit výběr</button></p>
+        <div class="addguest">
+          <input id="guestName" maxlength="30" placeholder="Náhradník bez účtu, jméno" aria-label="Jméno náhradníka">
+          <button type="button" class="btn" data-dlg="addguest">Přidat</button>
+        </div>
+        <div id="guestList" class="chips"></div>
+      </fieldset>
+      <label>Hráči soupeře
+        <textarea name="opp" rows="6" placeholder="Jeden hráč na řádek, v pořadí. Když nic nevyplníš, použije se H1 až H8.">${esc((r?.oppPlayers || []).map((p) => p.name).join("\n"))}</textarea>
+      </label>
+      <div class="actions">
+        ${r ? `<button type="button" class="btn danger" data-dlg="rdelete" data-id="${r.id}">Smazat kolo</button>` : ""}
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-dlg="close">Zrušit</button>
+        <button type="submit" class="btn primary">${r ? "Uložit kolo" : "Založit kolo"}</button>
+      </div>
+    </form>`;
+  $dlg.showModal();
+  renderGuests();
+}
+
+function openMatchStartDialog(slot) {
+  const r = curRound();
+  const our = r.ourPlayers || [];
+  const opp = r.oppPlayers || [];
+  if (!our.length) { toast("Nejdřív v kole (Upravit) vyber naše hráče."); return; }
+  const singles = [...state.matches.values()].filter((x) => x.kind === "single");
+  const cnt = (key, id) => singles.filter((x) => x[key] === id).length;
+  const lastNeed = singles.sort((a, b) => b.slot - a.slot)[0]?.legsToWin || 1;
+  const chip = (name, id, value, key) => {
+    const c = cnt(key, id);
+    return `<label class="chip"><input type="radio" name="${name}" value="${esc(id)}"><span>${esc(value)}${c ? ` <small class="muted">${c}×</small>` : ""}</span></label>`;
+  };
+  $dlg.innerHTML = `
+    <form id="matchStartForm" class="stack" data-slot="${slot}">
+      <h2>Zápas ${slot}</h2>
+      <fieldset class="types"><legend>Náš hráč</legend>
+        ${our.map((p) => chip("our", p.id, p.name, "ourId")).join("")}
+      </fieldset>
+      <fieldset class="types"><legend>Soupeř</legend>
+        ${opp.map((p) => chip("opp", p.id, p.name, "oppId")).join("")}
+      </fieldset>
+      <fieldset class="types"><legend>Hraje se na vítězné legy</legend>
+        ${[1, 2, 3].map((n) => `<label class="chip"><input type="radio" name="legs" value="${n}" ${n === lastNeed ? "checked" : ""}><span>${n}</span></label>`).join("")}
+      </fieldset>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-dlg="close">Zrušit</button>
+        <button type="submit" class="btn primary">Začít zapisovat</button>
+      </div>
+    </form>`;
+  $dlg.showModal();
+}
+
+function openTeamDialog(slot) {
+  const m = state.matches.get(slot);
+  const kind = slotKind(slot);
+  $dlg.innerHTML = `
+    <form id="teamForm" class="stack" data-slot="${slot}">
+      <h2>${KIND_LABEL[kind]}, výsledek</h2>
+      <p class="muted">Týmovka a kriket se nezapisují po šipkách, jen výsledek v legách.</p>
+      <div class="teamres">
+        <label>Naši<input type="number" name="our" min="0" max="9" inputmode="numeric" required value="${m ? m.result.our : ""}"></label>
+        <span class="vs">:</span>
+        <label>Soupeř<input type="number" name="opp" min="0" max="9" inputmode="numeric" required value="${m ? m.result.opp : ""}"></label>
+      </div>
+      <div class="actions">
+        ${m ? `<button type="button" class="btn danger" data-dlg="teamclear" data-slot="${slot}">Smazat výsledek</button>` : ""}
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-dlg="close">Zrušit</button>
+        <button type="submit" class="btn primary">Uložit výsledek</button>
       </div>
     </form>`;
   $dlg.showModal();
@@ -896,6 +1369,131 @@ async function deleteTournament(id) {
   toast("Turnaj je smazaný.");
 }
 
+/* ---------- akce: zápasy ---------- */
+
+const matchRef = (m) => doc(db, "rounds", state.rid, "matches", m.id);
+const lastLegOf = (legs) => legs[legs.length - 1];
+
+// Změna zápasu: nejdřív hned v paměti (zápis je rychlý i bez signálu), pak do databáze.
+async function mutateMatch(slot, fn) {
+  const m = state.matches.get(slot);
+  if (!m) return;
+  const legs = JSON.parse(JSON.stringify(m.legs || []));
+  const fields = fn(legs, m);
+  if (fields === false) return;
+  m.legs = legs;
+  Object.assign(m, fields || {});
+  render();
+  await updateDoc(matchRef(m), { legs, ...(fields || {}), updatedAt: serverTimestamp() });
+}
+
+async function syncRound() {
+  const r = curRound();
+  if (!r) return;
+  const sum = roundSummary([...state.matches.values()]);
+  if (r.ourWins === sum.ourWins && r.oppWins === sum.oppWins && r.played === sum.played) return;
+  await updateDoc(doc(db, "rounds", r.id), sum);
+}
+
+function handleSlot(n) {
+  if (slotKind(n) !== "single") { openTeamDialog(n); return; }
+  if (!state.matches.get(n)) { openMatchStartDialog(n); return; }
+  state.mslot = n;
+  state.oppInput = "";
+  state.mult = 1;
+  render();
+  window.scrollTo(0, 0);
+}
+
+const actStartLeg = (who) => mutateMatch(state.mslot, (legs) => { legs.push(newLeg(who)); });
+
+async function actDart(n, mm) {
+  const mult = n === 0 || n === 25 ? mm : state.mult;
+  state.mult = 1;
+  await mutateMatch(state.mslot, (legs) => {
+    const leg = lastLegOf(legs);
+    if (!leg || leg.winner) return false;
+    const before = leg.visits.length;
+    const next = addDart(leg, { n, m: mult });
+    if (next === leg) return false;
+    legs[legs.length - 1] = next;
+    if (next.visits.length > before && next.visits[next.visits.length - 1].bust) toast("Přehozeno, kolo se nepočítá.");
+  });
+}
+
+async function actOpp(value, used) {
+  const ok = await (async () => {
+    let accepted = true;
+    await mutateMatch(state.mslot, (legs) => {
+      const leg = lastLegOf(legs);
+      if (!leg) { accepted = false; return false; }
+      const chk = checkOpp(leg, value);
+      if (!chk.ok) { toast(chk.error); accepted = false; return false; }
+      legs[legs.length - 1] = addOpp(leg, value, used);
+    });
+    return accepted;
+  })();
+  if (ok) { state.oppInput = ""; state.oppUsed = 3; render(); }
+}
+
+async function actUndo() {
+  state.oppInput = "";
+  await mutateMatch(state.mslot, (legs) => {
+    const leg = lastLegOf(legs);
+    if (!leg) return false;
+    if (isEmptyLeg(leg)) { legs.pop(); return; }
+    legs[legs.length - 1] = undo(leg);
+  });
+}
+
+const actLegWin = (who) => mutateMatch(state.mslot, (legs) => {
+  const leg = lastLegOf(legs);
+  if (!leg || leg.winner) return false;
+  legs[legs.length - 1] = endLeg(leg, who);
+});
+
+async function actFinish() {
+  const slot = state.mslot;
+  await mutateMatch(slot, (legs, m) => {
+    const ms = matchState({ legs, legsToWin: m.legsToWin });
+    return { status: "done", result: { our: ms.our, opp: ms.opp } };
+  });
+  state.mslot = null;
+  state.oppInput = "";
+  render();
+  window.scrollTo(0, 0);
+  toast("Zápas je uložený.");
+  await syncRound();
+}
+
+async function actReopen() {
+  await mutateMatch(state.mslot, () => ({ status: "playing" }));
+  await syncRound();
+}
+
+async function actDeleteMatch() {
+  const m = state.matches.get(state.mslot);
+  if (!m || !confirm("Smazat celý zápas i se zapsanými šipkami? Vrátit to nejde.")) return;
+  state.matches.delete(m.slot);
+  state.mslot = null;
+  render();
+  await deleteDoc(matchRef(m));
+  await syncRound();
+  toast("Zápas je smazaný.");
+}
+
+async function deleteRound(id) {
+  if (!confirm("Smazat celé kolo i se všemi zápasy? Vrátit to nejde.")) return;
+  closeDialog();
+  if (state.rid === id) {
+    for (const m of state.matches.values()) await deleteDoc(doc(db, "rounds", id, "matches", m.id));
+    closeRound();
+  }
+  await deleteDoc(doc(db, "rounds", id));
+  render();
+  toast("Kolo je smazané.");
+}
+
 document.addEventListener("click", async (e) => {
   const dl = e.target.closest("[data-dlg]");
   if (dl) {
@@ -908,11 +1506,23 @@ document.addEventListener("click", async (e) => {
       if (dl.dataset.dlg === "selall" || dl.dataset.dlg === "selnone") {
         const on = dl.dataset.dlg === "selall";
         let free = MAX_PLAYERS - dlgGuests.length;
-        document.querySelectorAll("#tourForm input[name=member]").forEach((c) => {
+        document.querySelectorAll("#dlg input[name=member]").forEach((c) => {
           c.checked = on && free > 0;
           if (c.checked) free--;
         });
         updatePlayerCount();
+      }
+      if (dl.dataset.dlg === "rdelete") await deleteRound(dl.dataset.id);
+      if (dl.dataset.dlg === "teamclear") {
+        const slot = Number(dl.dataset.slot);
+        const m = state.matches.get(slot);
+        if (m) {
+          state.matches.delete(slot);
+          closeDialog();
+          render();
+          await deleteDoc(matchRef(m));
+          await syncRound();
+        }
       }
       if (dl.dataset.dlg === "mclear") {
         await updateDoc(doc(db, "tournaments", dl.dataset.tid), { [`results.${dl.dataset.mid}`]: deleteField() });
@@ -924,7 +1534,7 @@ document.addEventListener("click", async (e) => {
 
   const t = e.target.closest("[data-action]");
   if (!t || t.tagName === "SELECT") return;
-  const { action, id, status, view, uid, mode, mid } = t.dataset;
+  const { action, id, status, view, uid, mode, mid, who } = t.dataset;
 
   try {
     switch (action) {
@@ -951,6 +1561,7 @@ document.addEventListener("click", async (e) => {
         break;
       case "nav":
         if (view === "tournaments" && state.view === "tournaments") state.tid = null;
+        if (view === "matches" && state.view === "matches") closeRound();
         state.view = view;
         render();
         break;
@@ -970,6 +1581,35 @@ document.addEventListener("click", async (e) => {
         break;
       case "rename": openRenameDialog(); break;
       case "changelog": openChangelogDialog(); break;
+      case "round-new": openRoundDialog(); break;
+      case "round-edit": openRoundDialog(id); break;
+      case "round-open": openRound(id); window.scrollTo(0, 0); break;
+      case "round-back": closeRound(); render(); window.scrollTo(0, 0); break;
+      case "slot": handleSlot(Number(t.dataset.n)); break;
+      case "match-back": state.mslot = null; state.oppInput = ""; render(); window.scrollTo(0, 0); break;
+      case "mult": { const v = Number(t.dataset.v); state.mult = state.mult === v ? 1 : v; render(); break; }
+      case "dart": await actDart(Number(t.dataset.dn), Number(t.dataset.dm || 1)); break;
+      case "leg-start": await actStartLeg(who); break;
+      case "leg-win": await actLegWin(who); break;
+      case "opp-key":
+        if (state.oppInput.length < 3) {
+          state.oppInput = (state.oppInput === "0" ? "" : state.oppInput) + t.dataset.k;
+          render();
+        }
+        break;
+      case "opp-del": state.oppInput = state.oppInput.slice(0, -1); render(); break;
+      case "opp-used": state.oppUsed = Number(t.dataset.u); render(); break;
+      case "opp-ok": await actOpp(Number(state.oppInput), state.oppUsed); break;
+      case "opp-same": {
+        const legs = state.matches.get(state.mslot)?.legs || [];
+        const leg = legs[legs.length - 1];
+        if (leg) await actOpp(remaining(leg, "opp"), 3);
+        break;
+      }
+      case "match-undo": await actUndo(); break;
+      case "match-finish": await actFinish(); break;
+      case "match-reopen": await actReopen(); break;
+      case "match-delete": await actDeleteMatch(); break;
       case "tour-new": openTournamentDialog(); break;
       case "tour-edit": openTournamentDialog(id); break;
       case "tour-open": state.tid = id; render(); window.scrollTo(0, 0); break;
@@ -1009,8 +1649,8 @@ document.addEventListener("change", async (e) => {
 });
 
 document.addEventListener("change", (e) => {
-  if (e.target.closest("#tourForm") && e.target.name === "member") {
-    const checked = document.querySelectorAll("#tourForm input[name=member]:checked").length;
+  if (e.target.closest("#dlg") && e.target.name === "member") {
+    const checked = document.querySelectorAll("#dlg input[name=member]:checked").length;
     if (checked + dlgGuests.length > MAX_PLAYERS) {
       e.target.checked = false;
       toast(`Nejvíc ${MAX_PLAYERS} hráčů.`);
@@ -1129,6 +1769,74 @@ document.addEventListener("submit", async (e) => {
         [`results.${f.dataset.mid}`]: { winner }
       });
       closeDialog();
+      return;
+    }
+
+    if (f.id === "roundForm") {
+      const opponent = (fd.get("opponent") || "").trim().slice(0, 60);
+      const when = new Date(`${fd.get("date")}T12:00:00`);
+      if (!opponent || isNaN(when)) { toast("Vyplň soupeře a datum."); return; }
+      const ourPlayers = [
+        ...fd.getAll("member").map((uid) => ({ id: uid, name: state.users.get(uid)?.displayName || "Hráč", uid })),
+        ...dlgGuests.map((g) => ({ id: g.id, name: g.name, uid: null }))
+      ];
+      if (ourPlayers.length > MAX_PLAYERS) { toast(`Nejvíc ${MAX_PLAYERS} hráčů.`); return; }
+      let names = String(fd.get("opp") || "").split("\n").map((x) => x.trim().slice(0, 30)).filter(Boolean).slice(0, 12);
+      if (!names.length) names = Array.from({ length: 8 }, (_, i) => `H${i + 1}`);
+      const oppPlayers = names.map((name, i) => ({ id: `h${i + 1}`, name }));
+      const data = { opponent, date: Timestamp.fromDate(when), ourPlayers, oppPlayers };
+      const id = f.dataset.id;
+      if (id) {
+        await updateDoc(doc(db, "rounds", id), data);
+        toast("Kolo je uložené.");
+      } else {
+        const ref = await addDoc(collection(db, "rounds"), {
+          ...data, ourWins: 0, oppWins: 0, played: 0, createdBy: state.user.uid, createdAt: serverTimestamp()
+        });
+        state.view = "matches";
+        openRound(ref.id);
+        window.scrollTo(0, 0);
+        toast("Kolo je založené.");
+      }
+      closeDialog();
+      return;
+    }
+
+    if (f.id === "matchStartForm") {
+      const r = curRound();
+      const slot = Number(f.dataset.slot);
+      const our = (r.ourPlayers || []).find((p) => p.id === fd.get("our"));
+      const opp = (r.oppPlayers || []).find((p) => p.id === fd.get("opp"));
+      if (!our || !opp) { toast("Vyber našeho hráče i soupeře."); return; }
+      const data = {
+        slot, kind: "single", ourId: our.id, ourName: our.name, oppId: opp.id, oppName: opp.name,
+        legsToWin: Number(fd.get("legs")) || 1, legs: [], status: "playing", result: { our: 0, opp: 0 },
+        createdBy: state.user.uid
+      };
+      const id = `m${slot}`;
+      state.matches.set(slot, { id, ...data });
+      state.mslot = slot;
+      state.oppInput = "";
+      state.mult = 1;
+      closeDialog();
+      render();
+      window.scrollTo(0, 0);
+      await setDoc(doc(db, "rounds", state.rid, "matches", id), { ...data, updatedAt: serverTimestamp() });
+      return;
+    }
+
+    if (f.id === "teamForm") {
+      const slot = Number(f.dataset.slot);
+      const our = Number(fd.get("our"));
+      const opp = Number(fd.get("opp"));
+      if (![our, opp].every((x) => Number.isInteger(x) && x >= 0 && x <= 9)) { toast("Zadej legy jako čísla 0 až 9."); return; }
+      const id = `m${slot}`;
+      const data = { slot, kind: slotKind(slot), status: "done", result: { our, opp }, legs: [], createdBy: state.user.uid };
+      state.matches.set(slot, { id, ...data });
+      closeDialog();
+      render();
+      await setDoc(doc(db, "rounds", state.rid, "matches", id), { ...data, updatedAt: serverTimestamp() });
+      await syncRound();
       return;
     }
 

@@ -3,6 +3,14 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.8 (20. 11. 2026)
+
+- Nová záložka Zápasy: ligové kolo se soupeřem, datem, našimi hráči a hráči soupeře a seznamem 18 zápasů. Týmovka a kriket se zapisují jen výsledkem v legách.
+- Zápis zápasu šipku po šipce (single, double, triple, bull, bullseye, vedle) se zbývajícími body, pravidly double out, přehozením a hodem na středy po 15 kolech.
+- U soupeře se zadává jen to, kolik mu zbývá. Body za kolo a křížky se dopočítají samy.
+- Po zápase výsledek, průměr, počet šipek, nejlepší leg, nejvyšší kolo a zavření, 180 a křížky 95+, 133+ a 170+ pro obě strany.
+- V kole souhrn našich hráčů a přehled křížků všech zápasů pro zadání do ligy. Zápis jde vrátit krok po kroku.
+
 ## Verze 0.7 (20. 11. 2026)
 
 - Po nalosování turnaje je rozpis jen seznam zápasů jeden za druhým, bez kol.

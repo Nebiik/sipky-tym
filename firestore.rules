@@ -127,6 +127,62 @@ service cloud.firestore {
         && (isAdmin() || resource.data.createdBy == request.auth.uid);
     }
 
+    // Ligová kola. Kolo založí a zapisovat do něj může každý člen. Soupeře, datum a sestavy mění
+    // a kolo maže autor nebo správce. Skóre kola (souhrn) smí přepsat kdokoli, kdo zapisuje.
+    match /rounds/{rid} {
+      allow read: if isMember();
+
+      allow create: if isMember()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.keys().hasOnly(['opponent', 'date', 'ourPlayers', 'oppPlayers', 'ourWins', 'oppWins', 'played', 'createdBy', 'createdAt'])
+        && request.resource.data.opponent is string
+        && request.resource.data.opponent.size() <= 60
+        && request.resource.data.date is timestamp
+        && request.resource.data.ourPlayers is list
+        && request.resource.data.ourPlayers.size() <= 16
+        && request.resource.data.oppPlayers is list
+        && request.resource.data.oppPlayers.size() <= 12;
+
+      allow update: if isMember() && (
+        ((isAdmin() || resource.data.createdBy == request.auth.uid)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.keys().hasOnly(['opponent', 'date', 'ourPlayers', 'oppPlayers', 'ourWins', 'oppWins', 'played', 'createdBy', 'createdAt'])
+          && request.resource.data.opponent is string
+          && request.resource.data.opponent.size() <= 60
+          && request.resource.data.date is timestamp
+          && request.resource.data.ourPlayers is list
+          && request.resource.data.ourPlayers.size() <= 16
+          && request.resource.data.oppPlayers is list
+          && request.resource.data.oppPlayers.size() <= 12)
+        ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ourWins', 'oppWins', 'played'])
+          && request.resource.data.ourWins is int
+          && request.resource.data.oppWins is int
+          && request.resource.data.played is int)
+      );
+
+      allow delete: if isMember()
+        && (isAdmin() || resource.data.createdBy == request.auth.uid);
+
+      // Zápasy kola (1 až 18). Zapisovat smí každý člen.
+      match /matches/{mid} {
+        allow read: if isMember();
+
+        allow create, update: if isMember()
+          && request.resource.data.keys().hasOnly(['slot', 'kind', 'ourId', 'ourName', 'oppId', 'oppName', 'legsToWin', 'legs', 'status', 'result', 'createdBy', 'updatedAt'])
+          && request.resource.data.slot is int
+          && request.resource.data.slot >= 1
+          && request.resource.data.slot <= 18
+          && request.resource.data.kind in ['single', 'team501', 'cricket']
+          && request.resource.data.status in ['playing', 'done']
+          && request.resource.data.legs is list
+          && request.resource.data.legs.size() <= 7
+          && request.resource.data.result is map;
+
+        allow delete: if isMember();
+      }
+    }
+
     // Umožní jedním dotazem načíst hlasování ke všem událostem.
     match /{path=**}/rsvps/{uid} {
       allow read: if isMember();
