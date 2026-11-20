@@ -224,6 +224,28 @@ function stopData() {
 
 /* ---------- vykreslování ---------- */
 
+// Aplikace přidaná na plochu iPhonu: Google okno tu často nefunguje.
+const STANDALONE = window.navigator.standalone === true ||
+  window.matchMedia("(display-mode: standalone)").matches;
+
+const svgIcon = (inner) =>
+  `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const ICONS = {
+  events: svgIcon('<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+  team: svgIcon('<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17.2" cy="9.5" r="2.4"/><path d="M17 14.2c2.2.2 3.7 1.6 4.2 4.3"/>')
+};
+
+const initials = (name) =>
+  (name || "?").trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+const hue = (name) => {
+  let h = 0;
+  for (const c of name || "") h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h % 4;
+};
+const avatar = (name) => `<span class="av c${hue(name)}" aria-hidden="true">${esc(initials(name))}</span>`;
+const logo = (cls = "", size = 36) =>
+  `<img class="logo ${cls}" src="icons/icon.svg" alt="" width="${size}" height="${size}">`;
+
 let raf = 0;
 function render() {
   cancelAnimationFrame(raf);
@@ -242,13 +264,14 @@ function draw() {
 function renderSetup() {
   $app.innerHTML = `
     <main class="center">
+      ${logo("big-logo", 88)}
       <h1>${esc(TEAM_NAME)}</h1>
       <p>Chybí propojení s Firebase. Doplň údaje do souboru <code>js/firebase-config.js</code>. Postup je v souboru README.md.</p>
     </main>`;
 }
 
 function renderLoading() {
-  $app.innerHTML = `<main class="center"><p class="muted">Načítám…</p></main>`;
+  $app.innerHTML = `<main class="center">${logo("big-logo", 88)}<p class="muted">Načítám…</p></main>`;
 }
 
 function renderFatal(msg, e) {
@@ -266,15 +289,18 @@ function renderLogin(mode = "login", message = "") {
   const reg = mode === "register";
   $app.innerHTML = `
     <main class="login">
+      ${logo("big-logo", 96)}
       <h1 class="big">${esc(TEAM_NAME)}</h1>
       <p class="lead">Události, zápasy a turnaje na jednom místě. Přihlas se, ať víme, kdo jsi.</p>
-      <button class="btn primary wide" data-action="google">Přihlásit se přes Google</button>
-      <p class="or">nebo e-mailem</p>
+      ${STANDALONE
+        ? `<p class="note">V aplikaci z plochy se přihlas e-mailem a heslem, Google okno se tu na iPhonu často nepovede. Máš účet přes Google? Napiš svůj e-mail a zkus „Zapomenuté heslo“, přijde odkaz na nastavení hesla.</p>`
+        : `<button class="btn primary wide" data-action="google">Přihlásit se přes Google</button>
+           <p class="or">nebo e-mailem</p>`}
       <form id="emailForm" class="stack" data-mode="${mode}">
         ${reg ? `<label>Jméno<input name="name" required maxlength="40" autocomplete="name" placeholder="Jak ti říkají v týmu"></label>` : ""}
-        <label>E-mail<input type="email" name="email" required autocomplete="email"></label>
+        <label>E-mail<input type="email" name="email" required autocomplete="email" autocapitalize="off"></label>
         <label>Heslo<input type="password" name="password" required minlength="6" autocomplete="${reg ? "new-password" : "current-password"}"></label>
-        <button class="btn wide" type="submit">${reg ? "Vytvořit účet" : "Přihlásit se"}</button>
+        <button class="btn ${STANDALONE ? "primary" : ""} wide" type="submit">${reg ? "Vytvořit účet" : "Přihlásit se"}</button>
       </form>
       <div class="switch">
         ${reg
@@ -289,6 +315,7 @@ function renderLogin(mode = "login", message = "") {
 function renderPending() {
   $app.innerHTML = `
     <main class="center">
+      ${logo("big-logo", 88)}
       <h1>Čekáš na schválení</h1>
       <p>Ahoj ${esc(state.me.displayName)}, účet máš založený. Správce týmu tě ještě musí pustit dál.</p>
       <p class="muted">Jakmile to udělá, stránka se sama obnoví.</p>
@@ -299,19 +326,23 @@ function renderPending() {
 function shell(inner) {
   const admin = state.me.role === "admin";
   const pending = admin ? [...state.users.values()].filter((u) => u.role === "pending").length : 0;
+  const tab = (v, label) => `
+    <button class="tab ${state.view === v ? "on" : ""}" data-action="nav" data-view="${v}" ${state.view === v ? 'aria-current="page"' : ""}>
+      <span class="tab-ic">${ICONS[v]}${v === "team" && pending ? `<span class="badge" aria-label="${pending} čeká na schválení">${pending}</span>` : ""}</span>
+      <span>${label}</span>
+    </button>`;
   return `
     <header class="top">
-      <div class="brand">${esc(TEAM_NAME)}</div>
-      <div class="me">
-        <span>${esc(state.me.displayName)}</span>
-        <button class="link" data-action="logout">Odhlásit</button>
+      <div class="top-in">
+        ${logo("", 36)}
+        <div class="brand">${esc(TEAM_NAME)}</div>
+        <span title="${esc(state.me.displayName)}">${avatar(state.me.displayName)}</span>
       </div>
-      <nav aria-label="Hlavní menu">
-        <button class="tab ${state.view === "events" ? "on" : ""}" data-action="nav" data-view="events">Události</button>
-        <button class="tab ${state.view === "team" ? "on" : ""}" data-action="nav" data-view="team">Tým${pending ? `<span class="badge" aria-label="${pending} čeká na schválení">${pending}</span>` : ""}</button>
-      </nav>
     </header>
-    <main>${inner}</main>`;
+    <main>${inner}</main>
+    <nav class="tabbar" aria-label="Hlavní menu"><div class="tabbar-in">
+      ${tab("events", "Události")}${tab("team", "Tým")}
+    </div></nav>`;
 }
 
 /* ----- události ----- */
@@ -333,7 +364,7 @@ function viewEvents() {
   }
 
   if (past.length) {
-    html += `<p><button class="link" data-action="toggle-past">${state.showPast ? "Skrýt proběhlé" : `Zobrazit proběhlé (${past.length})`}</button></p>`;
+    html += `<p class="past-toggle"><button class="link" data-action="toggle-past">${state.showPast ? "Skrýt proběhlé" : `Zobrazit proběhlé (${past.length})`}</button></p>`;
     if (state.showPast) html += `<div class="list past">${past.map((e) => eventCard(e)).join("")}</div>`;
   }
   return html;
@@ -371,13 +402,19 @@ function eventCard(ev, hero = false) {
     <div class="rsvp">
       <button class="btn yes ${mine?.status === "yes" ? "on" : ""}" data-action="rsvp" data-id="${ev.id}" data-status="yes" aria-pressed="${mine?.status === "yes"}">Můžu</button>
       <button class="btn no ${mine?.status === "no" ? "on" : ""}" data-action="rsvp" data-id="${ev.id}" data-status="no" aria-pressed="${mine?.status === "no"}">Nemůžu</button>
-      ${mine ? `<button class="btn" data-action="note" data-id="${ev.id}">${mine.note ? "Upravit poznámku" : "Přidat poznámku"}</button>` : ""}
+      ${mine ? `<button class="btn ghost" data-action="note" data-id="${ev.id}">${mine.note ? "Upravit poznámku" : "Přidat poznámku"}</button>` : ""}
+    </div>`;
+
+  const meter = `
+    <div class="meter" aria-hidden="true">
+      <i class="y" style="flex-grow:${yes.length}"></i><i class="n" style="flex-grow:${no.length}"></i>
     </div>`;
 
   const tally = `
+    ${meter}
     <button class="tally" data-action="toggle" data-id="${ev.id}" aria-expanded="${open}">
-      <span>Můžou <b>${yes.length}</b></span>
-      <span>Nemůžou <b>${no.length}</b></span>
+      <span class="ty">Můžou <b>${yes.length}</b></span>
+      <span class="tn">Nemůžou <b>${no.length}</b></span>
       <span>Nehlasovali <b>${none.length}</b></span>
       <span class="more">${open ? "Skrýt" : "Kdo přesně"}</span>
     </button>
@@ -392,7 +429,7 @@ function eventCard(ev, hero = false) {
 
   if (hero) {
     return `
-      <article class="event hero">
+      <article class="event hero t-${esc(ev.type)}">
         <p class="until">${untilText(n)}</p>
         <div class="head"><h2 class="title">${t.icon} ${esc(title)}</h2>${edit}</div>
         ${details}
@@ -401,7 +438,7 @@ function eventCard(ev, hero = false) {
       </article>`;
   }
   return `
-    <article class="event ${n < 0 ? "gone" : ""}">
+    <article class="event t-${esc(ev.type)} ${n < 0 ? "gone" : ""}">
       ${dateTile}
       <div class="body">
         <div class="head"><h3 class="title">${t.icon} ${esc(title)}</h3>${edit}</div>
@@ -419,13 +456,14 @@ function viewTeam() {
   const members = all.filter((u) => isMemberRole(u.role)).sort(byName);
   const pending = all.filter((u) => u.role === "pending").sort(byName);
   const admin = state.me.role === "admin";
+  const mail = (u) => state.private.get(u.id)?.email || "";
 
   let html = `<div class="bar"><h1>Tým</h1><button class="btn" data-action="rename">Změnit jméno</button></div>`;
 
   if (admin && pending.length) {
     html += `<h2>Čekají na schválení</h2><div class="rows">${pending.map((u) => `
       <div class="row">
-        <div><strong>${esc(u.displayName)}</strong><br><small class="muted">${esc(state.private.get(u.id)?.email || "")}</small></div>
+        <div class="who">${avatar(u.displayName)}<div><strong>${esc(u.displayName)}</strong>${mail(u) ? `<br><small class="muted">${esc(mail(u))}</small>` : ""}</div></div>
         <div class="row-actions">
           <button class="btn primary" data-action="approve" data-uid="${u.id}">Schválit</button>
           <button class="btn" data-action="reject" data-uid="${u.id}">Odmítnout</button>
@@ -437,9 +475,12 @@ function viewTeam() {
     const self = u.id === state.user.uid;
     return `
       <div class="row">
-        <div>
-          <strong>${esc(u.displayName)}</strong>${self ? ` <small class="muted">(ty)</small>` : ""}
-          ${admin && state.private.get(u.id)?.email ? `<br><small class="muted">${esc(state.private.get(u.id).email)}</small>` : ""}
+        <div class="who">
+          ${avatar(u.displayName)}
+          <div>
+            <strong>${esc(u.displayName)}</strong>${self ? ` <small class="muted">(ty)</small>` : ""}
+            ${admin && mail(u) ? `<br><small class="muted">${esc(mail(u))}</small>` : ""}
+          </div>
         </div>
         <div class="row-actions">
           ${admin && !self
@@ -451,7 +492,8 @@ function viewTeam() {
             : `<span class="role ${u.role}">${u.role === "admin" ? "Správce" : "Člen"}</span>`}
         </div>
       </div>`;
-  }).join("")}</div>`;
+  }).join("")}</div>
+  <p class="logout"><button class="btn" data-action="logout">Odhlásit se</button></p>`;
 
   return html;
 }
