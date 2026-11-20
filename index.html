@@ -15,18 +15,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Podchod R">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="format-detection" content="telephone=no">
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Hanken+Grotesk:wght@400..700&display=swap">
+  <link rel="preload" href="fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/hanken-grotesk.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app"><main class="center"><img class="logo big-logo" src="icons/icon.svg" alt="" width="88" height="88"><p class="muted">Načítám…</p></main></div>
   <dialog id="dlg"></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/bundle.js"></script>
 </body>
 </html>

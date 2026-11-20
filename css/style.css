@@ -1,3 +1,13 @@
+/* Písma jsou přímo z webu (složka fonts), nic se nestahuje z cizích serverů. */
+@font-face {
+  font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 600 800; font-display: swap;
+  src: url("../fonts/bricolage-grotesque.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 700; font-display: swap;
+  src: url("../fonts/hanken-grotesk.woff2") format("woff2");
+}
+
 /* Podchod Klub R: barvy terče (černá, krémová, červená, zelená) a mosazný drát. */
 :root {
   --ink: #101714;

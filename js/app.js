@@ -5,7 +5,7 @@ import {
   sendPasswordResetEmail, updateProfile, signOut
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
-  getFirestore, collection, collectionGroup, doc, getDoc, setDoc, addDoc,
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, collectionGroup, doc, getDoc, setDoc, addDoc,
   updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig, TEAM_NAME } from "./firebase-config.js";
@@ -36,7 +36,10 @@ const state = {
   showPast: false,
   expanded: new Set(),
   pendingName: null,
-  dataOn: false
+  dataOn: false,
+  ready: { users: false, events: false, rsvps: false },
+  privChecked: false,
+  creating: false
 };
 
 let auth, db;
@@ -121,7 +124,15 @@ if (!configured) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   auth.languageCode = "cs";
-  db = getFirestore(app);
+  try {
+    // Data se ukládají i do telefonu, takže se při dalším spuštění ukážou hned.
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
+  } catch (e) {
+    console.warn("Lokální paměť není k dispozici, jedu bez ní.", e);
+    db = getFirestore(app);
+  }
   onAuthStateChanged(auth, onAuth);
 }
 
@@ -131,6 +142,7 @@ async function onAuth(user) {
   stopData();
   state.user = user;
   state.me = null;
+  state.privChecked = false;
 
   if (!user) {
     renderLogin();
@@ -138,37 +150,54 @@ async function onAuth(user) {
   }
   renderLoading();
 
+  // Žádné čekání na dotazy za sebou: profil se sleduje rovnou a vše ostatní se dělá na pozadí.
   const ref = doc(db, "users", user.uid);
-  try {
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      const name = (state.pendingName || user.displayName || (user.email || "").split("@")[0] || "Hráč")
-        .trim().slice(0, 40) || "Hráč";
-      await setDoc(ref, {
-        displayName: name,
-        role: "pending",
-        createdAt: serverTimestamp()
-      });
-    }
-    // E-mail je zvlášť, čte ho jen jeho majitel a správce.
-    const pref = doc(db, "userPrivate", user.uid);
-    const psnap = await getDoc(pref);
-    if (!psnap.exists() && user.email) {
-      await setDoc(pref, { email: user.email });
-    }
-    state.pendingName = null;
-  } catch (e) {
-    renderFatal("Nepodařilo se načíst tvůj účet. Zkontroluj pravidla Firestore a připojení.", e);
-    return;
-  }
-
   authUnsubs.push(onSnapshot(ref, (s) => {
-    state.me = s.exists() ? { id: s.id, ...s.data() } : null;
-    if (state.me && isMemberRole(state.me.role)) startData();
+    if (!s.exists()) {
+      state.me = null;
+      if (!s.metadata.fromCache) createProfile(user); // jen když to potvrdil server
+      render();
+      return;
+    }
+    state.me = { id: s.id, ...s.data() };
+    ensurePrivate(user);
+    if (isMemberRole(state.me.role)) startData();
     else stopData();
     syncPrivate();
     render();
-  }, (e) => renderFatal("Nepodařilo se načíst tvůj účet.", e)));
+  }, (e) => renderFatal("Nepodařilo se načíst tvůj účet. Zkontroluj pravidla Firestore a připojení.", e)));
+}
+
+async function createProfile(user) {
+  if (state.creating) return;
+  state.creating = true;
+  try {
+    const name = (state.pendingName || user.displayName || (user.email || "").split("@")[0] || "Hráč")
+      .trim().slice(0, 40) || "Hráč";
+    await setDoc(doc(db, "users", user.uid), {
+      displayName: name,
+      role: "pending",
+      createdAt: serverTimestamp()
+    });
+    state.pendingName = null;
+  } catch (e) {
+    renderFatal("Nepodařilo se založit tvůj účet. Zkontroluj pravidla Firestore a připojení.", e);
+  } finally {
+    state.creating = false;
+  }
+}
+
+// E-mail je zvlášť, čte ho jen jeho majitel a správce. Děje se na pozadí.
+async function ensurePrivate(user) {
+  if (state.privChecked || !user.email) return;
+  state.privChecked = true;
+  try {
+    const pref = doc(db, "userPrivate", user.uid);
+    const snap = await getDoc(pref);
+    if (!snap.exists()) await setDoc(pref, { email: user.email });
+  } catch (e) {
+    console.warn("Uložení e-mailu se nepovedlo.", e);
+  }
 }
 
 function startData() {
@@ -178,11 +207,13 @@ function startData() {
 
   dataUnsubs.push(onSnapshot(collection(db, "users"), (s) => {
     state.users = new Map(s.docs.map((d) => [d.id, { id: d.id, ...d.data() }]));
+    state.ready.users = true;
     render();
   }, onErr));
 
   dataUnsubs.push(onSnapshot(query(collection(db, "events"), orderBy("startsAt")), (s) => {
     state.events = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    state.ready.events = true;
     render();
   }, onErr));
 
@@ -194,6 +225,7 @@ function startData() {
       m.get(eid).set(d.id, d.data());
     });
     state.rsvps = m;
+    state.ready.rsvps = true;
     render();
   }, onErr));
 }
@@ -221,6 +253,7 @@ function stopData() {
   state.users = new Map();
   state.events = [];
   state.rsvps = new Map();
+  state.ready = { users: false, events: false, rsvps: false };
 }
 
 /* ---------- vykreslování ---------- */
@@ -258,7 +291,11 @@ function draw() {
   if (!state.me) return renderLoading();
   if (!isMemberRole(state.me.role)) return renderPending();
   const y = window.scrollY;
-  $app.innerHTML = shell(state.view === "team" ? viewTeam() : viewEvents());
+  const r = state.ready;
+  const body = r.users && r.events && r.rsvps
+    ? (state.view === "team" ? viewTeam() : viewEvents())
+    : `<p class="muted">Načítám…</p>`;
+  $app.innerHTML = shell(body);
   window.scrollTo(0, y);
 }
 

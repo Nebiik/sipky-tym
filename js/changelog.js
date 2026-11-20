@@ -1,7 +1,17 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.4";
+export const VERSION = "0.5";
 
 export const CHANGELOG = [
+  {
+    version: "0.5",
+    date: "20. 11. 2026",
+    changes: [
+      "Rychlejší spuštění: písma i všechny skripty jsou přímo z webu v jednom souboru, nic se nečeká na cizí servery.",
+      "Data se ukládají i do telefonu, takže se při dalším spuštění ukážou hned a pak se jen dorovnají.",
+      "Úvodní obrazovka se ukáže okamžitě, ještě než se aplikace načte.",
+      "Stavový řádek iPhonu (čas, baterie) je plný a obsah pod něj nezasahuje, takže horní okraj nemůže být rozmazaný."
+    ]
+  },
   {
     version: "0.4",
     date: "20. 11. 2026",
@@ -12,7 +22,7 @@ export const CHANGELOG = [
   },
   {
     version: "0.3",
-    date: "20. 11. 2026",
+    date: "listopad 2026",
     changes: [
       "Nový vzhled v barvách terče, odpočet u nejbližší události a spodní lišta.",
       "Avatary s iniciálami, barevný proužek podle druhu události, přehled hlasování jako proužek.",
@@ -22,14 +32,14 @@ export const CHANGELOG = [
   },
   {
     version: "0.2",
-    date: "19. 11. 2026",
+    date: "listopad 2026",
     changes: [
       "E-maily členů už nevidí ostatní hráči. Jsou uložené zvlášť a čte je jen majitel a správce."
     ]
   },
   {
     version: "0.1",
-    date: "19. 11. 2026",
+    date: "listopad 2026",
     changes: [
       "První verze: přihlášení přes Google nebo e-mail a schvalování nových členů správcem.",
       "Události (trénink, zápas, akce, jiné) s datem, místem a poznámkou.",

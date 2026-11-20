@@ -3,6 +3,13 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.5 (20. 11. 2026)
+
+- Rychlejší spuštění: písma i všechny skripty jsou přímo z webu v jednom souboru, nic se nečeká na cizí servery.
+- Data se ukládají i do telefonu, takže se při dalším spuštění ukážou hned a pak se jen dorovnají.
+- Úvodní obrazovka se ukáže okamžitě, ještě než se aplikace načte.
+- Stavový řádek iPhonu (čas, baterie) je plný a obsah pod něj nezasahuje, takže horní okraj nemůže být rozmazaný.
+
 ## Verze 0.4 (20. 11. 2026)
 
 - Horní okraj na iPhonu už není rozmazaný, hlavička i spodní lišta jsou plné.

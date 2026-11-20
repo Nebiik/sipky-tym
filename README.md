@@ -45,4 +45,27 @@ Dál už členy schvaluješ přímo v appce, v záložce **Tým**.
 - `firebaseConfig` je veřejný, to je v pořádku. Data chrání `firestore.rules`.
 - Jakmile pravidla změníš, znovu je zveřejni v konzoli.
 - Nepřihlášení a neschválení lidé nevidí žádná data. Schválení členové vidí všechny události,
-  hlasování i seznam členů.
+  hlasování i seznam jmen členů.
+- E-maily jsou uložené zvlášť v kolekci `userPrivate`. Čte je jen jejich majitel a správce.
+
+## Aplikace na ploše iPhonu
+
+1. Otevři stránku v **Safari** (ne v jiném prohlížeči).
+2. Klepni na **Sdílet** (čtvereček se šipkou) a vyber **Přidat na plochu**.
+3. Název „Podchod R“ nech nebo uprav a potvrď. Na ploše se objeví ikonka s terčem a písmenem R.
+
+Aplikace z plochy má vlastní úložiště, takže se v ní musíš **přihlásit znovu**. Google okno se tu
+často nepovede, použij **e-mail a heslo**. Máš účet přes Google? V přihlášení napiš e-mail a zkus
+„Zapomenuté heslo“, přijde odkaz na nastavení hesla.
+
+Po nahrání nové verze na GitHub se ikonka a název na ploše nemění. Kdyby se ikonka někdy měnila,
+smaž aplikaci z plochy a přidej ji znovu.
+
+## Jak je aplikace složená (pro úpravy kódu)
+
+- `js/app.js`, `js/changelog.js` a další soubory ve složce `js` jsou zdrojový kód.
+- `js/bundle.js` je z nich automaticky sestavený jediný soubor, který stránka skutečně načítá
+  (obsahuje i Firebase, takže se nic nestahuje z cizích serverů a start je rychlý).
+- Po každé změně zdrojového kódu se `js/bundle.js` musí sestavit znovu. Když budeš měnit kód ručně,
+  změna se v appce neprojeví, dokud se bundle nepřegeneruje.
+- `js/firebase-config.js` je záměrně mimo bundle, takže se tvoje Firebase údaje nepřepisují.
