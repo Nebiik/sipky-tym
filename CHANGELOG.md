@@ -3,6 +3,13 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.6 (20. 11. 2026)
+
+- Nová záložka Turnaje: založení turnaje, výběr hráčů (členové i hosté bez účtu) a hry (501 DO, 501 DI/DO, 301 DO, 301 DI/DO, Kriket).
+- Losování každý s každým po kolech, volitelně s odvetou. Při lichém počtu hráčů má v každém kole někdo volno.
+- Zadání vítěze zápasu (počet legů je nepovinný) a průběžná tabulka s body, výhrami a skóre legů.
+- Po odehrání všech zápasů se ukáže vítěz turnaje.
+
 ## Verze 0.5 (20. 11. 2026)
 
 - Rychlejší spuštění: písma i všechny skripty jsou přímo z webu v jednom souboru, nic se nečeká na cizí servery.

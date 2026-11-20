@@ -6,10 +6,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, collectionGroup, doc, getDoc, setDoc, addDoc,
-  updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, Timestamp
+  updateDoc, deleteDoc, deleteField, onSnapshot, query, orderBy, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig, TEAM_NAME } from "./firebase-config.js";
 import { VERSION, CHANGELOG } from "./changelog.js";
+import {
+  GAMES, MAX_PLAYERS, POINTS_PER_WIN, drawSchedule, computeStandings, tournamentStatus, roundsOf
+} from "./tournament.js";
 
 /* ---------- základ ---------- */
 
@@ -31,13 +34,15 @@ const state = {
   users: new Map(),    // uid -> dokument
   private: new Map(),  // uid -> {email}, jen pro správce
   events: [],          // seřazeno podle startsAt
+  tournaments: [],     // nejnovější první
+  tid: null,           // otevřený turnaj
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
   view: "events",
   showPast: false,
   expanded: new Set(),
   pendingName: null,
   dataOn: false,
-  ready: { users: false, events: false, rsvps: false },
+  ready: { users: false, events: false, rsvps: false, tournaments: false },
   privChecked: false,
   creating: false
 };
@@ -217,6 +222,17 @@ function startData() {
     render();
   }, onErr));
 
+  dataUnsubs.push(onSnapshot(query(collection(db, "tournaments"), orderBy("date", "desc")), (s) => {
+    state.tournaments = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    state.ready.tournaments = true;
+    render();
+  }, (e) => {
+    // Kdyby chyběla nová pravidla ve Firebase, zbytek aplikace musí dál fungovat.
+    state.ready.tournaments = true;
+    render();
+    toast(errMsg(e));
+  }));
+
   dataUnsubs.push(onSnapshot(collectionGroup(db, "rsvps"), (s) => {
     const m = new Map();
     s.docs.forEach((d) => {
@@ -253,7 +269,9 @@ function stopData() {
   state.users = new Map();
   state.events = [];
   state.rsvps = new Map();
-  state.ready = { users: false, events: false, rsvps: false };
+  state.tournaments = [];
+  state.tid = null;
+  state.ready = { users: false, events: false, rsvps: false, tournaments: false };
 }
 
 /* ---------- vykreslování ---------- */
@@ -266,6 +284,7 @@ const svgIcon = (inner) =>
   `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
 const ICONS = {
   events: svgIcon('<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+  tournaments: svgIcon('<path d="M8 4h8v5a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v1a3 3 0 0 0 3 3M16 6h3v1a3 3 0 0 1-3 3M12 13v4M9 20h6M10 17h4"/>'),
   team: svgIcon('<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><circle cx="17.2" cy="9.5" r="2.4"/><path d="M17 14.2c2.2.2 3.7 1.6 4.2 4.3"/>')
 };
 
@@ -292,8 +311,11 @@ function draw() {
   if (!isMemberRole(state.me.role)) return renderPending();
   const y = window.scrollY;
   const r = state.ready;
-  const body = r.users && r.events && r.rsvps
-    ? (state.view === "team" ? viewTeam() : viewEvents())
+  const ok = state.view === "team" ? r.users
+    : state.view === "tournaments" ? r.users && r.tournaments
+    : r.users && r.events && r.rsvps;
+  const body = ok
+    ? (state.view === "team" ? viewTeam() : state.view === "tournaments" ? viewTournaments() : viewEvents())
     : `<p class="muted">Načítám…</p>`;
   $app.innerHTML = shell(body);
   window.scrollTo(0, y);
@@ -379,7 +401,7 @@ function shell(inner) {
     </header>
     <main>${inner}</main>
     <nav class="tabbar" aria-label="Hlavní menu"><div class="tabbar-in">
-      ${tab("events", "Události")}${tab("team", "Tým")}
+      ${tab("events", "Události")}${tab("tournaments", "Turnaje")}${tab("team", "Tým")}
     </div></nav>`;
 }
 
@@ -487,6 +509,128 @@ function eventCard(ev, hero = false) {
     </article>`;
 }
 
+/* ----- turnaje ----- */
+
+const canManageTour = (t) => state.me.role === "admin" || t.createdBy === state.user.uid;
+const dateText = (ts) => {
+  const d = ts.toDate();
+  return `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`;
+};
+
+function viewTournaments() {
+  if (state.tid) {
+    const t = state.tournaments.find((x) => x.id === state.tid);
+    if (t) return viewTournament(t);
+    state.tid = null;
+  }
+  let html = `<div class="bar"><h1>Turnaje</h1><button class="btn primary" data-action="tour-new">Nový turnaj</button></div>`;
+  if (!state.tournaments.length) {
+    html += `<div class="empty"><p><strong>Zatím žádný turnaj.</strong></p><p>Založ turnaj, vyber hráče a hru a appka je nalosuje každý s každým.</p></div>`;
+  } else {
+    html += `<div class="list">${state.tournaments.map(tourCard).join("")}</div>`;
+  }
+  return html;
+}
+
+function winnersOf(t) {
+  const { rows } = computeStandings(t.players || [], t.matches || [], t.results || {});
+  return rows.filter((r) => r.rank === 1).map((r) => r.name);
+}
+
+function tourCard(t) {
+  const st = tournamentStatus(t);
+  const label = st.state === "draft" ? "Příprava, čeká na losování"
+    : st.state === "running" ? `Probíhá, odehráno ${st.played} z ${st.total}`
+    : `Dokončeno, vítěz ${winnersOf(t).join(" a ")}`;
+  const pct = st.total ? Math.round((st.played / st.total) * 100) : 0;
+  return `
+    <button class="tour ${st.state}" data-action="tour-open" data-id="${t.id}">
+      <span class="tour-head"><strong class="tour-name">${esc(t.name)}</strong><span class="gamechip">${esc(GAMES[t.game] || t.game)}</span></span>
+      <span class="muted">${dateText(t.date)}, ${(t.players || []).length} hráčů</span>
+      <span class="tour-state">${st.state === "finished" ? "🏆 " : ""}${esc(label)}</span>
+      ${st.total ? `<span class="meter" aria-hidden="true"><i class="y" style="flex-grow:${pct}"></i><i style="flex-grow:${100 - pct}"></i></span>` : ""}
+    </button>`;
+}
+
+function viewTournament(t) {
+  const players = t.players || [];
+  const matches = t.matches || [];
+  const results = t.results || {};
+  const st = tournamentStatus(t);
+  const manage = canManageTour(t);
+  const names = new Map(players.map((p) => [p.id, p.name]));
+
+  let html = `
+    <p class="crumb"><button class="link" data-action="tour-back">‹ Všechny turnaje</button></p>
+    <div class="bar">
+      <div>
+        <h1>${esc(t.name)}</h1>
+        <p class="meta"><span class="gamechip">${esc(GAMES[t.game] || t.game)}</span> <span class="muted">${dateText(t.date)}${t.double ? ", s odvetami" : ""}</span></p>
+      </div>
+      ${manage ? `<button class="btn" data-action="tour-edit" data-id="${t.id}">Upravit</button>` : ""}
+    </div>`;
+
+  if (st.state === "draft") {
+    html += `<h2>Hráči (${players.length})</h2>`;
+    html += players.length
+      ? `<ul class="plist">${players.map((p) => `<li>${avatar(p.name)}<span>${esc(p.name)}${p.uid ? "" : ` <small class="muted">host</small>`}</span></li>`).join("")}</ul>`
+      : `<div class="empty"><p>Zatím tu nejsou žádní hráči.</p></div>`;
+    if (manage) {
+      html += players.length < 2
+        ? `<p class="muted">Přidej aspoň dva hráče, pak jde turnaj nalosovat. Hráče upravíš tlačítkem Upravit.</p>`
+        : `<p class="draw-row"><button class="btn primary wide" data-action="tour-draw" data-id="${t.id}">Nalosovat turnaj</button></p>
+           <p class="muted">Rozpis se vylosuje náhodně. Každý hraje s každým${t.double ? " dvakrát (odveta)" : ""}.</p>`;
+    } else {
+      html += `<p class="muted">Turnaj se ještě nelosoval.</p>`;
+    }
+    return html;
+  }
+
+  // tabulka
+  const { rows, anyLegs } = computeStandings(players, matches, results);
+  if (st.state === "finished") {
+    html += `<p class="champion">🏆 Vítěz turnaje: <strong>${esc(winnersOf(t).join(" a "))}</strong></p>`;
+  }
+  html += `<h2>Tabulka</h2>
+    <div class="tablewrap"><table class="standings">
+      <thead><tr><th>#</th><th>Hráč</th><th>Z</th><th>V</th><th>P</th>${anyLegs ? "<th>Legy</th>" : ""}<th>Body</th></tr></thead>
+      <tbody>${rows.map((r) => `
+        <tr class="${r.rank === 1 && st.state === "finished" ? "first" : ""}">
+          <td>${st.played ? `${r.rank}.` : "–"}</td><td class="nm">${esc(r.name)}</td><td>${r.played}</td><td>${r.wins}</td><td>${r.losses}</td>
+          ${anyLegs ? `<td>${r.legsFor}:${r.legsAgainst}</td>` : ""}<td><b>${r.points}</b></td>
+        </tr>`).join("")}</tbody>
+    </table></div>
+    <p class="muted legend">Z zápasy, V výhry, P prohry. Výhra = ${POINTS_PER_WIN} body.</p>`;
+
+  // zápasy po kolech
+  html += `<h2>Zápasy</h2><p class="muted">Odehráno ${st.played} z ${st.total}.${manage ? " Klepnutím na zápas zadáš výsledek." : ""}</p>`;
+  for (const [r, list] of roundsOf(matches)) {
+    const busy = new Set(list.flatMap((m) => [m.a, m.b]));
+    const bye = players.filter((p) => !busy.has(p.id)).map((p) => p.name);
+    html += `<section class="round"><h3>Kolo ${r}${bye.length ? ` <small class="muted">volno: ${esc(bye.join(", "))}</small>` : ""}</h3><div class="matches">`;
+    for (const m of list) {
+      const res = results[m.id];
+      const done = !!res?.winner;
+      const aWin = done && res.winner === m.a;
+      const bWin = done && res.winner === m.b;
+      const score = done && Number.isInteger(res.legsA) && Number.isInteger(res.legsB) ? `${res.legsA}:${res.legsB}` : done ? "✓" : "vs";
+      const inner = `
+        <span class="no">${m.no}</span>
+        <span class="side a ${aWin ? "win" : done ? "lose" : ""}">${esc(names.get(m.a) || "?")}</span>
+        <span class="score">${score}</span>
+        <span class="side b ${bWin ? "win" : done ? "lose" : ""}">${esc(names.get(m.b) || "?")}</span>`;
+      html += manage
+        ? `<button class="match ${done ? "done" : ""}" data-action="match" data-id="${t.id}" data-mid="${m.id}">${inner}</button>`
+        : `<div class="match ${done ? "done" : ""}">${inner}</div>`;
+    }
+    html += `</div></section>`;
+  }
+  if (manage) {
+    html += `<p class="redraw"><button class="link" data-action="tour-draw" data-id="${t.id}">Nalosovat znovu</button></p>`;
+  }
+  return html;
+}
+
 /* ----- tým ----- */
 
 function viewTeam() {
@@ -587,6 +731,109 @@ function openNoteDialog(id) {
   $dlg.showModal();
 }
 
+let dlgGuests = [];
+
+function updatePlayerCount() {
+  const el = document.getElementById("pcount");
+  if (!el) return;
+  const n = document.querySelectorAll("#tourForm input[name=member]:checked").length + dlgGuests.length;
+  el.textContent = `(${n} z ${MAX_PLAYERS})`;
+}
+
+function renderGuests() {
+  const el = document.getElementById("guestList");
+  if (!el) return;
+  el.innerHTML = dlgGuests.map((g) =>
+    `<span class="gchip">${esc(g.name)} <small class="muted">host</small><button type="button" data-dlg="rmguest" data-gid="${esc(g.id)}" aria-label="Odebrat hosta ${esc(g.name)}">×</button></span>`).join("");
+  updatePlayerCount();
+}
+
+function addGuest() {
+  const input = document.getElementById("guestName");
+  const name = (input?.value || "").trim().slice(0, 30);
+  if (!name) return;
+  const members = document.querySelectorAll("#tourForm input[name=member]:checked").length;
+  if (members + dlgGuests.length >= MAX_PLAYERS) { toast(`Nejvíc ${MAX_PLAYERS} hráčů.`); return; }
+  dlgGuests.push({ id: "g" + Date.now().toString(36) + dlgGuests.length, name });
+  input.value = "";
+  renderGuests();
+}
+
+function openTournamentDialog(id) {
+  const t = id ? state.tournaments.find((x) => x.id === id) : null;
+  const draft = !t || !(t.matches || []).length;
+  dlgGuests = t ? (t.players || []).filter((p) => !p.uid).map((p) => ({ id: p.id, name: p.name })) : [];
+  const selected = new Set(t ? (t.players || []).filter((p) => p.uid).map((p) => p.uid) : []);
+  const members = [...state.users.values()].filter((u) => isMemberRole(u.role)).sort(byName);
+  const d = t ? t.date.toDate() : new Date();
+  const dateVal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const curGame = t?.game || "501-do";
+
+  $dlg.innerHTML = `
+    <form id="tourForm" class="stack" data-id="${t?.id || ""}">
+      <h2>${t ? "Upravit turnaj" : "Nový turnaj"}</h2>
+      <label>Název<input name="name" maxlength="60" placeholder="Např. Páteční turnaj" value="${esc(t?.name || "")}"></label>
+      <fieldset class="types">
+        <legend>Hra</legend>
+        ${Object.entries(GAMES).map(([k, label]) => `
+          <label class="chip"><input type="radio" name="game" value="${k}" ${k === curGame ? "checked" : ""}><span>${esc(label)}</span></label>`).join("")}
+      </fieldset>
+      <label>Datum<input type="date" name="date" required value="${dateVal}"></label>
+      ${draft ? `
+      <label class="check"><input type="checkbox" name="double" ${t?.double ? "checked" : ""}><span>Odveta (každá dvojice hraje dvakrát)</span></label>
+      <fieldset class="players">
+        <legend>Hráči <span id="pcount" class="muted"></span></legend>
+        <div class="chips">${members.map((u) => `
+          <label class="chip"><input type="checkbox" name="member" value="${u.id}" ${selected.has(u.id) ? "checked" : ""}><span>${esc(u.displayName)}</span></label>`).join("")}</div>
+        <p class="sel-links"><button type="button" class="link" data-dlg="selall">Vybrat všechny</button> <button type="button" class="link" data-dlg="selnone">Zrušit výběr</button></p>
+        <div class="addguest">
+          <input id="guestName" maxlength="30" placeholder="Host bez účtu, jméno" aria-label="Jméno hosta">
+          <button type="button" class="btn" data-dlg="addguest">Přidat</button>
+        </div>
+        <div id="guestList" class="chips"></div>
+      </fieldset>` : `<p class="muted">Hráče už nejde měnit, turnaj je nalosovaný. Pro změnu hráčů turnaj smaž a založ nový.</p>`}
+      <div class="actions">
+        ${t ? `<button type="button" class="btn danger" data-dlg="tdelete" data-id="${t.id}">Smazat turnaj</button>` : ""}
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-dlg="close">Zrušit</button>
+        <button type="submit" class="btn primary">${t ? "Uložit turnaj" : "Vytvořit turnaj"}</button>
+      </div>
+    </form>`;
+  $dlg.showModal();
+  renderGuests();
+}
+
+function openMatchDialog(tid, mid) {
+  const t = state.tournaments.find((x) => x.id === tid);
+  const m = t?.matches?.find((x) => x.id === mid);
+  if (!t || !m) return;
+  const names = new Map((t.players || []).map((p) => [p.id, p.name]));
+  const res = t.results?.[mid];
+  $dlg.innerHTML = `
+    <form id="matchForm" class="stack" data-tid="${tid}" data-mid="${mid}">
+      <h2>Kolo ${m.r}, výsledek zápasu</h2>
+      <p class="muted">${esc(GAMES[t.game] || "")}. Klepni na jméno vítěze.</p>
+      <div class="duel">
+        <div class="duel-side">
+          <input type="number" name="legsA" min="0" max="99" inputmode="numeric" placeholder="legy" aria-label="Legy: ${esc(names.get(m.a))}" value="${Number.isInteger(res?.legsA) ? res.legsA : ""}">
+          <button type="submit" name="winner" value="${esc(m.a)}" class="btn ${res?.winner === m.a ? "primary" : ""}">${esc(names.get(m.a) || "?")}</button>
+        </div>
+        <span class="vs">vs</span>
+        <div class="duel-side">
+          <input type="number" name="legsB" min="0" max="99" inputmode="numeric" placeholder="legy" aria-label="Legy: ${esc(names.get(m.b))}" value="${Number.isInteger(res?.legsB) ? res.legsB : ""}">
+          <button type="submit" name="winner" value="${esc(m.b)}" class="btn ${res?.winner === m.b ? "primary" : ""}">${esc(names.get(m.b) || "?")}</button>
+        </div>
+      </div>
+      <p class="muted">Počet legů je nepovinný. Když ho vyplníš, použije se ve skóre v tabulce. Vyplň ho u obou hráčů, nebo u žádného.</p>
+      <div class="actions">
+        ${res ? `<button type="button" class="btn danger" data-dlg="mclear" data-tid="${tid}" data-mid="${mid}">Smazat výsledek</button>` : ""}
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-dlg="close">Zavřít</button>
+      </div>
+    </form>`;
+  $dlg.showModal();
+}
+
 function openChangelogDialog() {
   $dlg.innerHTML = `
     <div class="changes">
@@ -636,19 +883,58 @@ async function deleteEvent(id) {
   toast("Událost je smazaná.");
 }
 
+async function drawTournament(id) {
+  const t = state.tournaments.find((x) => x.id === id);
+  if (!t) return;
+  const players = t.players || [];
+  if (players.length < 2) { toast("Přidej aspoň dva hráče."); return; }
+  if ((t.matches || []).length) {
+    const hasRes = Object.keys(t.results || {}).length > 0;
+    const q = hasRes ? "Nalosovat znovu? Všechny zadané výsledky se smažou." : "Nalosovat znovu? Rozpis se změní.";
+    if (!confirm(q)) return;
+  }
+  const matches = drawSchedule(players.map((p) => p.id), !!t.double);
+  await updateDoc(doc(db, "tournaments", id), { matches, results: {} });
+  toast("Turnaj je nalosovaný.");
+}
+
+async function deleteTournament(id) {
+  if (!confirm("Smazat turnaj i s výsledky? Vrátit to nejde.")) return;
+  await deleteDoc(doc(db, "tournaments", id));
+  state.tid = null;
+  closeDialog();
+  toast("Turnaj je smazaný.");
+}
+
 document.addEventListener("click", async (e) => {
   const dl = e.target.closest("[data-dlg]");
   if (dl) {
     try {
       if (dl.dataset.dlg === "close") closeDialog();
       if (dl.dataset.dlg === "delete") await deleteEvent(dl.dataset.id);
+      if (dl.dataset.dlg === "tdelete") await deleteTournament(dl.dataset.id);
+      if (dl.dataset.dlg === "addguest") addGuest();
+      if (dl.dataset.dlg === "rmguest") { dlgGuests = dlgGuests.filter((g) => g.id !== dl.dataset.gid); renderGuests(); }
+      if (dl.dataset.dlg === "selall" || dl.dataset.dlg === "selnone") {
+        const on = dl.dataset.dlg === "selall";
+        let free = MAX_PLAYERS - dlgGuests.length;
+        document.querySelectorAll("#tourForm input[name=member]").forEach((c) => {
+          c.checked = on && free > 0;
+          if (c.checked) free--;
+        });
+        updatePlayerCount();
+      }
+      if (dl.dataset.dlg === "mclear") {
+        await updateDoc(doc(db, "tournaments", dl.dataset.tid), { [`results.${dl.dataset.mid}`]: deleteField() });
+        closeDialog();
+      }
     } catch (err) { toast(errMsg(err)); }
     return;
   }
 
   const t = e.target.closest("[data-action]");
   if (!t || t.tagName === "SELECT") return;
-  const { action, id, status, view, uid, mode } = t.dataset;
+  const { action, id, status, view, uid, mode, mid } = t.dataset;
 
   try {
     switch (action) {
@@ -674,6 +960,7 @@ document.addEventListener("click", async (e) => {
         await signOut(auth);
         break;
       case "nav":
+        if (view === "tournaments" && state.view === "tournaments") state.tid = null;
         state.view = view;
         render();
         break;
@@ -693,6 +980,12 @@ document.addEventListener("click", async (e) => {
         break;
       case "rename": openRenameDialog(); break;
       case "changelog": openChangelogDialog(); break;
+      case "tour-new": openTournamentDialog(); break;
+      case "tour-edit": openTournamentDialog(id); break;
+      case "tour-open": state.tid = id; render(); window.scrollTo(0, 0); break;
+      case "tour-back": state.tid = null; render(); window.scrollTo(0, 0); break;
+      case "tour-draw": await drawTournament(id); break;
+      case "match": openMatchDialog(id, mid); break;
       case "approve":
         await updateDoc(doc(db, "users", uid), { role: "member" });
         toast("Člen schválený.");
@@ -722,6 +1015,24 @@ document.addEventListener("change", async (e) => {
   } catch (err) {
     toast(errMsg(err));
     render();
+  }
+});
+
+document.addEventListener("change", (e) => {
+  if (e.target.closest("#tourForm") && e.target.name === "member") {
+    const checked = document.querySelectorAll("#tourForm input[name=member]:checked").length;
+    if (checked + dlgGuests.length > MAX_PLAYERS) {
+      e.target.checked = false;
+      toast(`Nejvíc ${MAX_PLAYERS} hráčů.`);
+    }
+    updatePlayerCount();
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.id === "guestName") {
+    e.preventDefault();
+    addGuest();
   }
 });
 
@@ -779,6 +1090,69 @@ document.addEventListener("submit", async (e) => {
       await updateDoc(doc(db, "events", f.dataset.id, "rsvps", state.user.uid), {
         note: (fd.get("note") || "").trim().slice(0, 200),
         updatedAt: serverTimestamp()
+      });
+      closeDialog();
+      return;
+    }
+
+    if (f.id === "tourForm") {
+      const game = fd.get("game");
+      const dv = fd.get("date");
+      const when = new Date(`${dv}T12:00:00`);
+      if (!GAMES[game] || isNaN(when)) { toast("Zvol hru a datum."); return; }
+      const name = (fd.get("name") || "").trim().slice(0, 60)
+        || `Turnaj ${when.getDate()}. ${when.getMonth() + 1}.`;
+      const base = { name, game, date: Timestamp.fromDate(when) };
+      const id = f.dataset.id;
+      const hasPlayersUi = !!f.querySelector("input[name=member]") || !!document.getElementById("pcount");
+      let extra = {};
+      if (hasPlayersUi) {
+        const ids = fd.getAll("member");
+        const players = [
+          ...ids.map((uid) => ({ id: uid, name: state.users.get(uid)?.displayName || "Hráč", uid })),
+          ...dlgGuests.map((g) => ({ id: g.id, name: g.name, uid: null }))
+        ];
+        if (players.length > MAX_PLAYERS) { toast(`Nejvíc ${MAX_PLAYERS} hráčů.`); return; }
+        extra = { players, double: fd.get("double") === "on" };
+      }
+      if (id) {
+        await updateDoc(doc(db, "tournaments", id), { ...base, ...extra });
+        toast("Turnaj je uložený.");
+      } else {
+        const ref = await addDoc(collection(db, "tournaments"), {
+          ...base, double: false, players: [], ...extra, matches: [], results: {},
+          createdBy: state.user.uid, createdAt: serverTimestamp()
+        });
+        state.view = "tournaments";
+        state.tid = ref.id;
+        window.scrollTo(0, 0);
+        toast("Turnaj je založený.");
+      }
+      closeDialog();
+      return;
+    }
+
+    if (f.id === "matchForm") {
+      const winner = e.submitter?.value;
+      if (!winner) return;
+      const t = state.tournaments.find((x) => x.id === f.dataset.tid);
+      const m = t?.matches?.find((x) => x.id === f.dataset.mid);
+      if (!t || !m) return;
+      const rawA = String(fd.get("legsA") ?? "").trim();
+      const rawB = String(fd.get("legsB") ?? "").trim();
+      let legsA = null, legsB = null;
+      if (rawA !== "" || rawB !== "") {
+        if (rawA === "" || rawB === "") { toast("Vyplň legy u obou hráčů, nebo u žádného."); return; }
+        legsA = Number(rawA); legsB = Number(rawB);
+        if (!Number.isInteger(legsA) || !Number.isInteger(legsB) || legsA < 0 || legsB < 0) {
+          toast("Legy musí být celá čísla."); return;
+        }
+        const winnerLegs = winner === m.a ? legsA : legsB;
+        const loserLegs = winner === m.a ? legsB : legsA;
+        if (winnerLegs <= loserLegs) { toast("Vítěz musí mít víc legů než soupeř."); return; }
+      }
+      await updateDoc(doc(db, "tournaments", f.dataset.tid), {
+        [`results.${f.dataset.mid}`]: { winner, legsA, legsB }
       });
       closeDialog();
       return;

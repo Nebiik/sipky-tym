@@ -22,7 +22,7 @@ service cloud.firestore {
       allow read: if isMember() || (signedIn() && request.auth.uid == uid);
 
       allow create: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['displayName', 'email', 'role', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['displayName', 'role', 'createdAt'])
         && request.resource.data.role == 'pending'
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() > 0
@@ -41,6 +41,15 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
           && request.resource.data.role in ['pending', 'member', 'admin']);
 
+      allow delete: if isAdmin();
+    }
+
+    // Soukromé údaje (e-mail). Čte je jen majitel a správce, ostatní členové ne.
+    match /userPrivate/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email'])
+        && request.resource.data.email is string;
       allow delete: if isAdmin();
     }
 
@@ -81,6 +90,41 @@ service cloud.firestore {
               || isAdmin()
               || get(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid);
       }
+    }
+
+    // Turnaje: číst smí každý člen, zakládat také. Měnit a mazat smí autor nebo správce.
+    match /tournaments/{tid} {
+      allow read: if isMember();
+
+      allow create: if isMember()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.keys().hasOnly(['name', 'game', 'date', 'double', 'players', 'matches', 'results', 'createdBy', 'createdAt'])
+        && request.resource.data.game in ['501-do', '501-dido', '301-do', '301-dido', 'kriket']
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.date is timestamp
+        && request.resource.data.players is list
+        && request.resource.data.players.size() <= 16
+        && request.resource.data.matches is list
+        && request.resource.data.matches.size() <= 240
+        && request.resource.data.results is map;
+
+      allow update: if isMember()
+        && (isAdmin() || resource.data.createdBy == request.auth.uid)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.keys().hasOnly(['name', 'game', 'date', 'double', 'players', 'matches', 'results', 'createdBy', 'createdAt'])
+        && request.resource.data.game in ['501-do', '501-dido', '301-do', '301-dido', 'kriket']
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.date is timestamp
+        && request.resource.data.players is list
+        && request.resource.data.players.size() <= 16
+        && request.resource.data.matches is list
+        && request.resource.data.matches.size() <= 240
+        && request.resource.data.results is map;
+
+      allow delete: if isMember()
+        && (isAdmin() || resource.data.createdBy == request.auth.uid);
     }
 
     // Umožní jedním dotazem načíst hlasování ke všem událostem.

@@ -1,7 +1,17 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.5";
+export const VERSION = "0.6";
 
 export const CHANGELOG = [
+  {
+    version: "0.6",
+    date: "20. 11. 2026",
+    changes: [
+      "Nová záložka Turnaje: založení turnaje, výběr hráčů (členové i hosté bez účtu) a hry (501 DO, 501 DI/DO, 301 DO, 301 DI/DO, Kriket).",
+      "Losování každý s každým po kolech, volitelně s odvetou. Při lichém počtu hráčů má v každém kole někdo volno.",
+      "Zadání vítěze zápasu (počet legů je nepovinný) a průběžná tabulka s body, výhrami a skóre legů.",
+      "Po odehrání všech zápasů se ukáže vítěz turnaje."
+    ]
+  },
   {
     version: "0.5",
     date: "20. 11. 2026",
