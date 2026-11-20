@@ -12,7 +12,7 @@ export const CHANGELOG = [
   },
   {
     version: "0.3",
-    date: "listopad 2026",
+    date: "20. 11. 2026",
     changes: [
       "Nový vzhled v barvách terče, odpočet u nejbližší události a spodní lišta.",
       "Avatary s iniciálami, barevný proužek podle druhu události, přehled hlasování jako proužek.",
@@ -22,14 +22,14 @@ export const CHANGELOG = [
   },
   {
     version: "0.2",
-    date: "listopad 2026",
+    date: "19. 11. 2026",
     changes: [
       "E-maily členů už nevidí ostatní hráči. Jsou uložené zvlášť a čte je jen majitel a správce."
     ]
   },
   {
     version: "0.1",
-    date: "listopad 2026",
+    date: "19. 11. 2026",
     changes: [
       "První verze: přihlášení přes Google nebo e-mail a schvalování nových členů správcem.",
       "Události (trénink, zápas, akce, jiné) s datem, místem a poznámkou.",
