@@ -498,3 +498,6 @@ main.live { padding-top: calc(.7rem + env(safe-area-inset-top)); padding-bottom:
 .scorebar strong { font-family: "Bricolage Grotesque", system-ui, sans-serif; font-size: 1.25rem; }
 .scorebar .link { font-size: 1.05rem; padding: .35rem .2rem; }
 body.scoring #toast { bottom: auto; top: calc(.8rem + env(safe-area-inset-top)); }
+
+.bet { color: var(--red-text); font-size: .8rem; font-weight: 700; }
+.fine { margin: .6rem 0 0; padding: .6rem .85rem; background: var(--panel); border-left: 4px solid var(--brass); border-radius: 8px; }

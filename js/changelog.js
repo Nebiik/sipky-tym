@@ -1,7 +1,28 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.8";
+export const VERSION = "0.10";
 
 export const CHANGELOG = [
+  {
+    version: "0.10",
+    date: "20. 11. 2026",
+    changes: [
+      "Betony se počítají přesně podle pravidel: 1 beton za kolo s méně než 20 body a 1 beton za každou šipku vedle. Obojí se sčítá, takže kolo vedle, 8, 8 jsou 2 betony.",
+      "Při zavírání se nepočítá nic. Aplikace pozná, jestli se zbytek dal zavřít šipkami, které v kole zbývaly, a v tom případě se zeptá, jestli to bylo zavírání.",
+      "V tabulce kol je u betonu vidět jejich počet (beton, beton ×2).",
+      "Za nezavřený leg (hod na středy) je jeden beton navíc."
+    ]
+  },
+  {
+    version: "0.9",
+    date: "20. 11. 2026",
+    changes: [
+      "Betony: kolo s méně než 20 body se počítá jako beton, pokuta je 5 Kč. Při zavírání se beton nepočítá.",
+      "Když zbytek šel zavřít a kolo bylo slabé, aplikace se zeptá, jestli to bylo zavírání. Jinak se beton pozná sám.",
+      "Za nezavřený leg (hod na středy) je jeden beton navíc.",
+      "Betony a pokuta jsou v přehledu zápasu i v souhrnu našich hráčů v kole.",
+      "U soupeře se sledují jen křížky a výsledek. Průměr, šipky a dotaz na počet šipek při zavření zmizely."
+    ]
+  },
   {
     version: "0.8",
     date: "20. 11. 2026",

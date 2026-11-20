@@ -3,12 +3,21 @@
 // Datový model legu (obyčejný objekt, ukládá se do Firestore):
 //   { starter: "our"|"opp", visits: [...], cur: [...], winner: null|"our"|"opp", end: null|"checkout"|"bull" }
 // visit (jedno kolo = nejvýš 3 šipky jednoho hráče):
-//   { by: "our"|"opp", darts?: [{n,m}], score, rem, used, bust?, out? }
+//   { by: "our"|"opp", darts?: [{n,m}], score, rem, used, bust?, out?, beton? }
+//   beton (jen naše kolo): počet betonů v kole, nebo null = čeká se na odpověď, jestli to bylo zavírání.
+//   bdef = betony, které se počítají tak či tak, bmaybe = betony navíc, pokud to nebylo zavírání.
 //   score = body za kolo (u přehozeného kola 0), rem = kolik zbývá po kole, used = počet hozených šipek.
 // Naše šipky se zapisují jednotlivě, u soupeře se zadává jen to, kolik mu zbývá, a body za kolo se dopočítají.
 
 export const START = 501;
 export const MAX_ROUNDS = 15;
+// Betony (každý stojí BETON_FINE korun), mimo zavírání:
+//   1 beton za kolo (3 šipky) s méně než 20 body,
+//   1 beton za každou šipku vedle,
+//   1 beton za nezavřený leg (hod na středy).
+// Obojí se sčítá: kolo vedle, 8, 8 jsou 2 betony (pod 20 a jedno vedle).
+export const BETON_LIMIT = 20;
+export const BETON_FINE = 5;
 
 // 3 šipkami nejdou hodit tyto součty
 const IMPOSSIBLE_SCORES = new Set([163, 166, 169, 172, 173, 175, 176, 178, 179]);
@@ -27,6 +36,36 @@ export function dartLabel(d) {
   return (d.m === 3 ? "T" : d.m === 2 ? "D" : "") + d.n;
 }
 export const canFinish = (r) => r >= 2 && r <= 170 && !BOGEY.has(r);
+
+// Jde zbytek zavřít nejvýš n šipkami? (poslední šipka double nebo střed)
+const FINISHERS = new Set([...Array.from({ length: 20 }, (_, i) => 2 * (i + 1)), 50]);
+const ALL_DARTS = (() => {
+  const v = new Set([0, 25, 50]);
+  for (let n = 1; n <= 20; n++) { v.add(n); v.add(2 * n); v.add(3 * n); }
+  return [...v];
+})();
+const FIN = (() => {
+  const f1 = new Set(FINISHERS);
+  const f2 = new Set(f1);
+  for (const a of ALL_DARTS) for (const d of FINISHERS) f2.add(a + d);
+  const f3 = new Set(f2);
+  for (const a of ALL_DARTS) for (const r of f2) f3.add(a + r);
+  return [null, f1, f2, f3];
+})();
+export const canFinishWith = (r, n) => n >= 1 && FIN[Math.min(n, 3)].has(r);
+
+// Betony za normální kolo. def = jisté, maybe = jen pokud to nebylo zavírání.
+export function betonsOfVisit(remBefore, darts, total) {
+  let def = 0, maybe = 0;
+  let r = remBefore;
+  darts.forEach((d, i) => {
+    if (d.n === 0) { if (canFinishWith(r, 3 - i)) maybe++; else def++; }
+    r -= d.n * d.m;
+  });
+  if (total < BETON_LIMIT) { if (canFinishWith(remBefore, 3)) maybe++; else def++; }
+  return { def, maybe };
+}
+export const visitBetons = (v) => (typeof v.beton === "number" ? v.beton : v.beton === true ? 1 : 0);
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
@@ -58,15 +97,19 @@ export function addDart(leg, dart) {
   const bust = after < 0 || after === 1 || (after === 0 && dart.m !== 2);
   if (bust) {
     // přehozeno: kolo se nepočítá a zbytek zůstává, počítáme všechny tři šipky
-    L.visits.push({ by: "our", darts: cur, score: 0, rem: before, used: 3, bust: true });
+    L.visits.push({ by: "our", darts: cur, score: 0, rem: before, used: 3, bust: true, beton: 0 });
     L.cur = [];
   } else if (after === 0) {
-    L.visits.push({ by: "our", darts: cur, score: before, rem: 0, used: cur.length, out: true });
+    L.visits.push({ by: "our", darts: cur, score: before, rem: 0, used: cur.length, out: true, beton: 0 });
     L.cur = [];
     L.winner = "our";
     L.end = "checkout";
   } else if (cur.length === 3) {
-    L.visits.push({ by: "our", darts: cur, score: total, rem: after, used: 3 });
+    // betony: jisté se počítají hned, ty, které by neplatily při zavírání, rozhodne odpověď (beton = null)
+    const { def, maybe } = betonsOfVisit(before, cur, total);
+    const visit = { by: "our", darts: cur, score: total, rem: after, used: 3, beton: maybe ? null : def };
+    if (maybe) { visit.bdef = def; visit.bmaybe = maybe; }
+    L.visits.push(visit);
     L.cur = [];
   } else {
     L.cur = cur;
@@ -74,9 +117,22 @@ export function addDart(leg, dart) {
   return L;
 }
 
+// Kolo, u kterého se čeká na odpověď „bylo to zavírání?“. Vrací ho jen těsně po našem kole.
+export function pendingBeton(leg) {
+  const last = leg.visits[leg.visits.length - 1];
+  return last && last.by === "our" && last.beton === null && !leg.winner ? last : null;
+}
+export function answerBeton(leg, isBeton) {
+  if (!pendingBeton(leg)) return leg;
+  const L = clone(leg);
+  const v = L.visits[L.visits.length - 1];
+  v.beton = (v.bdef || 0) + (isBeton ? v.bmaybe || 0 : 0);
+  return L;
+}
+
 // Kontrola zadaného zbytku soupeře. Vrací { ok, score } nebo { ok:false, error }.
 export function checkOpp(leg, rem) {
-  if (leg.winner || turnOf(leg) !== "opp" || needsBull(leg)) return { ok: false, error: "Teď nehraje soupeř." };
+  if (leg.winner || turnOf(leg) !== "opp" || needsBull(leg) || pendingBeton(leg)) return { ok: false, error: "Teď nehraje soupeř." };
   const prev = remaining(leg, "opp");
   if (!Number.isInteger(rem) || rem < 0) return { ok: false, error: "Zadej, kolik soupeři zbývá." };
   if (rem > prev) return { ok: false, error: `Soupeři zbývalo ${prev}, víc být nemůže.` };
@@ -131,7 +187,7 @@ export function crossOf(score) {
 }
 
 export function sideStats(legs, side) {
-  const s = { points: 0, darts: 0, visits: 0, avg: 0, c95: 0, c133: 0, c170: 0, n180: 0, highest: 0, highOut: 0, legsWon: 0, bestLeg: null };
+  const s = { points: 0, darts: 0, visits: 0, avg: 0, c95: 0, c133: 0, c170: 0, n180: 0, highest: 0, highOut: 0, legsWon: 0, bestLeg: null, beton: 0, betonLegs: 0, betonTotal: 0, fine: 0 };
   for (const leg of legs) {
     let legDarts = 0;
     for (const v of leg.visits) {
@@ -142,13 +198,18 @@ export function sideStats(legs, side) {
       const c = crossOf(v.score);
       if (c === 1) s.c95++; else if (c === 2) s.c133++; else if (c === 3) s.c170++;
       if (v.out && v.score > s.highOut) s.highOut = v.score;
+      if (side === "our") s.beton += visitBetons(v);
     }
+    // za každý nezavřený leg (hod na středy) dostává náš hráč jeden beton navíc
+    if (side === "our" && leg.end === "bull") s.betonLegs++;
     if (leg.winner === side) {
       s.legsWon++;
       if (s.bestLeg === null || legDarts < s.bestLeg) s.bestLeg = legDarts;
     }
   }
   s.avg = s.darts ? (s.points / s.darts) * 3 : 0;
+  s.betonTotal = s.beton + s.betonLegs;
+  s.fine = s.betonTotal * BETON_FINE;
   return s;
 }
 
@@ -179,15 +240,15 @@ export function playerTotals(matches) {
   const map = new Map();
   for (const m of matches) {
     if (m.kind !== "single" || !(m.legs || []).length) continue;
-    if (!map.has(m.ourId)) map.set(m.ourId, { id: m.ourId, name: m.ourName, matches: 0, won: 0, lost: 0, legsW: 0, legsL: 0, points: 0, darts: 0, c95: 0, c133: 0, c170: 0, n180: 0 });
+    if (!map.has(m.ourId)) map.set(m.ourId, { id: m.ourId, name: m.ourName, matches: 0, won: 0, lost: 0, legsW: 0, legsL: 0, points: 0, darts: 0, c95: 0, c133: 0, c170: 0, n180: 0, beton: 0 });
     const p = map.get(m.ourId);
     const st = sideStats(m.legs, "our");
     const t = tally(m.legs);
     p.matches++; p.legsW += t.our; p.legsL += t.opp;
     p.points += st.points; p.darts += st.darts;
-    p.c95 += st.c95; p.c133 += st.c133; p.c170 += st.c170; p.n180 += st.n180;
+    p.c95 += st.c95; p.c133 += st.c133; p.c170 += st.c170; p.n180 += st.n180; p.beton += st.betonTotal;
     if (m.status === "done") { if ((m.result?.our ?? 0) > (m.result?.opp ?? 0)) p.won++; else if ((m.result?.opp ?? 0) > (m.result?.our ?? 0)) p.lost++; }
   }
-  return [...map.values()].map((p) => ({ ...p, avg: p.darts ? (p.points / p.darts) * 3 : 0 }))
+  return [...map.values()].map((p) => ({ ...p, avg: p.darts ? (p.points / p.darts) * 3 : 0, fine: p.beton * BETON_FINE }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 }

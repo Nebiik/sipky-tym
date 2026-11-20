@@ -16,7 +16,7 @@ import {
 import {
   START, MISS, other, dartLabel, newLeg, remaining, turnOf, needsBull, curTotal, curRemaining,
   addDart, checkOpp, addOpp, endLeg, undo, isEmptyLeg, crossOf, sideStats, tally, matchState,
-  roundSummary, playerTotals
+  roundSummary, playerTotals, pendingBeton, answerBeton, visitBetons, BETON_FINE
 } from "./scoring.js";
 
 /* ---------- základ ---------- */
@@ -47,7 +47,6 @@ const state = {
   mslot: null,         // otevřený zápas
   mult: 1,             // zvolený násobek (1 single, 2 double, 3 triple)
   oppInput: "",        // zbytek soupeře, který se právě píše
-  oppUsed: 3,          // šipek soupeře při zavření
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
   view: "events",
   showPast: false,
@@ -788,9 +787,10 @@ function viewRound(r) {
     const totals = playerTotals(all);
     html += `<h2>Naši hráči</h2>
       <div class="tablewrap"><table class="standings small">
-        <thead><tr><th>Hráč</th><th>Zápasy</th><th>Legy</th><th>Průměr</th><th>95+</th><th>133+</th><th>170+</th><th>180</th></tr></thead>
-        <tbody>${totals.map((p) => `<tr><td class="nm">${esc(p.name)}</td><td>${p.won}:${p.lost}</td><td>${p.legsW}:${p.legsL}</td><td>${fmtAvg(p.avg)}</td><td>${p.c95}</td><td>${p.c133}</td><td>${p.c170}</td><td>${p.n180}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Hráč</th><th>Zápasy</th><th>Legy</th><th>Průměr</th><th>95+</th><th>133+</th><th>170+</th><th>180</th><th>Betony</th><th>Pokuta</th></tr></thead>
+        <tbody>${totals.map((p) => `<tr><td class="nm">${esc(p.name)}</td><td>${p.won}:${p.lost}</td><td>${p.legsW}:${p.legsL}</td><td>${fmtAvg(p.avg)}</td><td>${p.c95}</td><td>${p.c133}</td><td>${p.c170}</td><td>${p.n180}</td><td>${p.beton}</td><td>${p.fine} Kč</td></tr>`).join("")}</tbody>
       </table></div>
+      <p class="fine">Pokuty za betony v tomto kole: <strong>${totals.reduce((sum, p) => sum + p.fine, 0)} Kč</strong></p>
       <h2>Přehled pro zápis do ligy</h2>
       <p class="muted">Křížky obou stran z každého zápasu: 95+, 133+ a 170+.</p>
       <div class="tablewrap"><table class="standings small league">
@@ -815,7 +815,7 @@ function visitsTable(leg) {
   const n = Math.max(our.length, opp.length);
   if (!n) return "";
   const cell = (v, withDarts) => v
-    ? `<td>${v.bust ? `<span class="bust">přehozeno</span>` : v.score}${v.bust ? "" : crossMark(v.score)}${withDarts && v.darts ? `<small class="muted darts">${v.darts.map(dartLabel).join(" ")}</small>` : ""}</td><td class="rm">${v.rem}</td>`
+    ? `<td>${v.bust ? `<span class="bust">přehozeno</span>` : v.score}${v.bust ? "" : crossMark(v.score)}${visitBetons(v) ? ` <span class="bet">beton${visitBetons(v) > 1 ? ` ×${visitBetons(v)}` : ""}</span>` : ""}${withDarts && v.darts ? `<small class="muted darts">${v.darts.map(dartLabel).join(" ")}</small>` : ""}</td><td class="rm">${v.rem}</td>`
     : `<td></td><td></td>`;
   let rows = "";
   for (let i = n - 1; i >= 0; i--) rows += `<tr><td class="rn">${i + 1}</td>${cell(our[i], true)}${cell(opp[i], false)}</tr>`;
@@ -858,7 +858,6 @@ function oppPad(leg, m) {
       <span class="val">${raw === "" ? "–" : esc(raw)}</span>
     </div>
     <p class="preview">${preview}</p>
-    ${raw === "0" ? `<div class="usedrow"><span>Šipek na zavření</span>${[1, 2, 3].map((u) => `<button class="mult ${state.oppUsed === u ? "on" : ""}" data-action="opp-used" data-u="${u}">${u}</button>`).join("")}</div>` : ""}
     <div class="keypad">
       ${keys}
       <button class="num" data-action="opp-del" aria-label="Smazat číslici">⌫</button>
@@ -892,7 +891,7 @@ function viewScoring(r, m) {
         <div class="bside ${side} ${turn === side ? "turn" : ""}">
           <div class="bname">${esc(nm(side))}</div>
           <div class="brem">${remShow(side)}</div>
-          <div class="bmeta">legy ${side === "our" ? ms.our : ms.opp}, průměr ${fmtAvg((side === "our" ? so : sp).avg)}</div>
+          <div class="bmeta">legy ${side === "our" ? ms.our : ms.opp}${side === "our" ? `, průměr ${fmtAvg(so.avg)}` : ""}</div>
         </div>`).join("")}
     </div>
     <p class="statusline">${status}</p>`;
@@ -914,6 +913,20 @@ function viewScoring(r, m) {
         <div class="duel">
           <button class="btn ${suggest === "our" ? "primary" : ""}" data-action="leg-start" data-who="our">${esc(nm("our"))}</button>
           <button class="btn ${suggest === "opp" ? "primary" : ""}" data-action="leg-start" data-who="opp">${esc(nm("opp"))}</button>
+        </div>
+      </div>`;
+  } else if (pendingBeton(last)) {
+    const pv = pendingBeton(last);
+    const bm = pv.bmaybe || 0;
+    const bd = pv.bdef || 0;
+    panel = `
+      <div class="panel">
+        <div class="opphead"><h2>Beton?</h2><button class="undo" data-action="match-undo" aria-label="Vrátit poslední kolo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button></div>
+        <p>${esc(nm("our"))} hodil <strong>${pv.score}</strong> (${pv.darts.map(dartLabel).join(", ")}) ze zbytku ${pv.rem + pv.score}. Bylo to zavírání?</p>
+        ${bd ? `<p class="muted">${bd}× beton se počítá tak či tak.</p>` : ""}
+        <div class="duel">
+          <button class="btn" data-action="beton" data-v="0">Zavíral, nepočítat</button>
+          <button class="btn primary" data-action="beton" data-v="1">Beton ${bm}×, pokuta ${bm * BETON_FINE} Kč</button>
         </div>
       </div>`;
   } else if (needsBull(last)) {
@@ -985,18 +998,20 @@ function viewMatchSummary(r, m) {
     <div class="tablewrap"><table class="stats">
       <tbody>
         ${row("Legy", ms.our, ms.opp)}
-        ${row("Průměr", fmtAvg(a.avg), fmtAvg(b.avg))}
-        ${row("Šipky", a.darts, b.darts)}
-        ${row("Nejlepší leg (šipek)", dash(a.bestLeg), dash(b.bestLeg))}
-        ${row("Nejvyšší kolo", a.highest, b.highest)}
-        ${row("Nejvyšší zavření", a.highOut || "–", b.highOut || "–")}
-        ${row("180", a.n180, b.n180)}
+        ${row("Průměr", fmtAvg(a.avg), "–")}
+        ${row("Šipky", a.darts, "–")}
+        ${row("Nejlepší leg (šipek)", dash(a.bestLeg), "–")}
+        ${row("Nejvyšší kolo", a.highest, "–")}
+        ${row("Nejvyšší zavření", a.highOut || "–", "–")}
+        ${row("180", a.n180, "–")}
         ${row("Křížky 95+ ✚", a.c95, b.c95)}
         ${row("Křížky 133+ ✚✚", a.c133, b.c133)}
         ${row("Křížky 170+ ✚✚✚", a.c170, b.c170)}
+        ${row("Betony", a.betonTotal, "–")}
       </tbody>
     </table></div>
-    <p class="muted legend">Křížek se počítá za nejvyšší pásmo kola: 95 až 132 jeden, 133 až 169 dva, 170 a víc tři.</p>
+    ${a.betonTotal ? `<p class="fine">Pokuta za betony: <strong>${a.fine} Kč</strong>${a.betonLegs ? ` <span class="muted">(z toho ${a.betonLegs} za nezavřený leg)</span>` : ""}</p>` : ""}
+    <p class="muted legend">Křížek se počítá za nejvyšší pásmo kola: 95 až 132 jeden, 133 až 169 dva, 170 a víc tři. Beton je kolo s méně než 20 body a každá šipka vedle (mimo zavírání), plus jeden za nezavřený leg. Soupeře sledujeme jen kvůli křížkům.</p>
     <h2>Legy</h2>
     ${legs.map((leg, i) => `
       <details class="legbox">
@@ -1421,7 +1436,7 @@ async function actDart(n, mm) {
   });
 }
 
-async function actOpp(value, used) {
+async function actOpp(value) {
   const ok = await (async () => {
     let accepted = true;
     await mutateMatch(state.mslot, (legs) => {
@@ -1429,12 +1444,18 @@ async function actOpp(value, used) {
       if (!leg) { accepted = false; return false; }
       const chk = checkOpp(leg, value);
       if (!chk.ok) { toast(chk.error); accepted = false; return false; }
-      legs[legs.length - 1] = addOpp(leg, value, used);
+      legs[legs.length - 1] = addOpp(leg, value);
     });
     return accepted;
   })();
-  if (ok) { state.oppInput = ""; state.oppUsed = 3; render(); }
+  if (ok) { state.oppInput = ""; render(); }
 }
+
+const actBeton = (isBeton) => mutateMatch(state.mslot, (legs) => {
+  const leg = lastLegOf(legs);
+  if (!leg || !pendingBeton(leg)) return false;
+  legs[legs.length - 1] = answerBeton(leg, isBeton);
+});
 
 async function actUndo() {
   state.oppInput = "";
@@ -1598,12 +1619,12 @@ document.addEventListener("click", async (e) => {
         }
         break;
       case "opp-del": state.oppInput = state.oppInput.slice(0, -1); render(); break;
-      case "opp-used": state.oppUsed = Number(t.dataset.u); render(); break;
-      case "opp-ok": await actOpp(Number(state.oppInput), state.oppUsed); break;
+      case "opp-ok": await actOpp(Number(state.oppInput)); break;
+      case "beton": await actBeton(t.dataset.v === "1"); break;
       case "opp-same": {
         const legs = state.matches.get(state.mslot)?.legs || [];
         const leg = legs[legs.length - 1];
-        if (leg) await actOpp(remaining(leg, "opp"), 3);
+        if (leg) await actOpp(remaining(leg, "opp"));
         break;
       }
       case "match-undo": await actUndo(); break;

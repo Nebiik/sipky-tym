@@ -3,6 +3,21 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.10 (20. 11. 2026)
+
+- Betony se počítají přesně podle pravidel: 1 beton za kolo s méně než 20 body a 1 beton za každou šipku vedle. Obojí se sčítá, takže kolo vedle, 8, 8 jsou 2 betony.
+- Při zavírání se nepočítá nic. Aplikace pozná, jestli se zbytek dal zavřít šipkami, které v kole zbývaly, a v tom případě se zeptá, jestli to bylo zavírání.
+- V tabulce kol je u betonu vidět jejich počet (beton, beton ×2).
+- Za nezavřený leg (hod na středy) je jeden beton navíc.
+
+## Verze 0.9 (20. 11. 2026)
+
+- Betony: kolo s méně než 20 body se počítá jako beton, pokuta je 5 Kč. Při zavírání se beton nepočítá.
+- Když zbytek šel zavřít a kolo bylo slabé, aplikace se zeptá, jestli to bylo zavírání. Jinak se beton pozná sám.
+- Za nezavřený leg (hod na středy) je jeden beton navíc.
+- Betony a pokuta jsou v přehledu zápasu i v souhrnu našich hráčů v kole.
+- U soupeře se sledují jen křížky a výsledek. Průměr, šipky a dotaz na počet šipek při zavření zmizely.
+
 ## Verze 0.8 (20. 11. 2026)
 
 - Nová záložka Zápasy: ligové kolo se soupeřem, datem, našimi hráči a hráči soupeře a seznamem 18 zápasů. Týmovka a kriket se zapisují jen výsledkem v legách.
