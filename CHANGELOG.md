@@ -3,6 +3,13 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.13 (20. 11. 2026)
+
+- V seznamu turnajů je u dokončeného turnaje vidět vítěz s pohárem a barvou jeho kolečka. Při shodě na prvním místě jsou uvedeni všichni.
+- Turnaje jsou rozdělené na probíhající a dokončené.
+- Nový přepínač Turnaje a Statistiky. Statistiky mají žebříček (vyhrané turnaje, odehrané turnaje, výhry a prohry v zápasech, úspěšnost) a vzájemné skóre dvou hráčů přes všechny turnaje se seznamem zápasů.
+- Statistiky počítají jen členy týmu. Hosté bez účtu se v nich neobjevují.
+
 ## Verze 0.12 (20. 11. 2026)
 
 - Liga ze sipky.org: v záložce Zápasy je nový přepínač Zápisy a Liga. V Lize je tabulka vaší skupiny se zvýrazněným naším týmem, naše pozice a naše další utkání.

@@ -114,3 +114,70 @@ export function roundsOf(matches) {
   });
   return map;
 }
+
+/* ---------- vítězové a statistiky napříč turnaji ---------- */
+
+// Vítězové dokončeného turnaje (první místo, při shodě jich může být víc). Rozpracovaný turnaj nemá vítěze.
+export function tournamentWinners(t) {
+  if (tournamentStatus(t).state !== "finished") return [];
+  const { rows } = computeStandings(t.players || [], t.matches || [], t.results || {});
+  const byId = new Map((t.players || []).map((p) => [p.id, p]));
+  return rows.filter((r) => r.rank === 1).map((r) => ({ id: r.id, name: r.name, uid: byId.get(r.id)?.uid || null }));
+}
+
+const dateMs = (d) => (d?.toDate ? d.toDate().getTime() : new Date(d).getTime() || 0);
+
+// Žebříček členů týmu přes všechny turnaje. Hosté bez účtu (bez uid) se nepočítají.
+//  titles = vyhrané turnaje (jen dokončené, shoda na prvním místě se počítá každému),
+//  tournaments = dokončené turnaje, kterých se člen zúčastnil,
+//  won/lost = rozhodnuté zápasy ze všech turnajů (i z právě probíhajících).
+export function playerRanking(tournaments) {
+  const map = new Map();
+  const get = (p) => {
+    if (!map.has(p.uid)) map.set(p.uid, { uid: p.uid, name: p.name, tournaments: 0, titles: 0, won: 0, lost: 0 });
+    return map.get(p.uid);
+  };
+  for (const t of tournaments) {
+    const members = new Map((t.players || []).filter((p) => p.uid).map((p) => [p.id, p]));
+    if (tournamentStatus(t).state === "finished") {
+      for (const p of members.values()) get(p).tournaments++;
+      for (const w of tournamentWinners(t)) if (w.uid) get(w).titles++;
+    }
+    for (const m of t.matches || []) {
+      const winner = t.results?.[m.id]?.winner;
+      if (!winner) continue;
+      for (const side of ["a", "b"]) {
+        const p = members.get(m[side]);
+        if (p) { const s = get(p); if (winner === m[side]) s.won++; else s.lost++; }
+      }
+    }
+  }
+  const list = [...map.values()].map((s) => ({ ...s, pct: s.won + s.lost ? s.won / (s.won + s.lost) : null }));
+  list.sort((x, y) => y.titles - x.titles || (y.pct ?? -1) - (x.pct ?? -1) || y.won - x.won || x.name.localeCompare(y.name, "cs"));
+  const same = (x, y) => x.titles === y.titles && x.won === y.won && x.lost === y.lost;
+  list.forEach((r, i) => { r.rank = i > 0 && same(list[i - 1], r) ? list[i - 1].rank : i + 1; });
+  return list;
+}
+
+// Vzájemné skóre dvou členů přes všechny turnaje. Nejnovější zápasy jsou první.
+export function headToHead(tournaments, uidA, uidB) {
+  let a = 0, b = 0;
+  const matches = [];
+  if (!uidA || !uidB || uidA === uidB) return { a, b, matches }; // hosté bez účtu se nepárují
+  for (const t of tournaments) {
+    const players = t.players || [];
+    const ia = players.find((p) => p.uid === uidA)?.id;
+    const ib = players.find((p) => p.uid === uidB)?.id;
+    if (!ia || !ib) continue;
+    (t.matches || []).forEach((m, i) => {
+      if (!((m.a === ia && m.b === ib) || (m.a === ib && m.b === ia))) return;
+      const w = t.results?.[m.id]?.winner;
+      if (!w) return;
+      const winner = w === ia ? uidA : uidB;
+      if (winner === uidA) a++; else b++;
+      matches.push({ tid: t.id, tournament: t.name, game: t.game, date: t.date, no: i + 1, winner });
+    });
+  }
+  matches.sort((x, y) => dateMs(y.date) - dateMs(x.date) || y.no - x.no);
+  return { a, b, matches };
+}

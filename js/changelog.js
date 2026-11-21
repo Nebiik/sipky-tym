@@ -1,7 +1,17 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.12";
+export const VERSION = "0.13";
 
 export const CHANGELOG = [
+  {
+    version: "0.13",
+    date: "20. 11. 2026",
+    changes: [
+      "V seznamu turnajů je u dokončeného turnaje vidět vítěz s pohárem a barvou jeho kolečka. Při shodě na prvním místě jsou uvedeni všichni.",
+      "Turnaje jsou rozdělené na probíhající a dokončené.",
+      "Nový přepínač Turnaje a Statistiky. Statistiky mají žebříček (vyhrané turnaje, odehrané turnaje, výhry a prohry v zápasech, úspěšnost) a vzájemné skóre dvou hráčů přes všechny turnaje se seznamem zápasů.",
+      "Statistiky počítají jen členy týmu. Hosté bez účtu se v nich neobjevují."
+    ]
+  },
   {
     version: "0.12",
     date: "20. 11. 2026",
