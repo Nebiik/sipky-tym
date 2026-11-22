@@ -17,7 +17,8 @@ import {
 import {
   START, MISS, other, dartLabel, newLeg, remaining, turnOf, needsBull, curTotal, curRemaining,
   addDart, checkOpp, addOpp, endLeg, undo, isEmptyLeg, crossOf, sideStats, tally, matchState,
-  roundSummary, playerTotals, pendingBeton, answerBeton, visitBetons, BETON_FINE
+  roundSummary, playerTotals, pendingBeton, answerBeton, visitBetons, BETON_FINE,
+  roundOutcome, opponentTotals, teamTotals
 } from "./scoring.js";
 
 /* ---------- základ ---------- */
@@ -51,6 +52,9 @@ const state = {
   mview: "rounds",      // v záložce Zápasy: "rounds" (zápisy) nebo "liga"
   liga: { status: "idle", data: null, error: "" },
   ligaAll: false,      // zobrazit všechny sloupce tabulky ligy
+  allMatches: [],      // zápasy ze všech kol (statistiky za celou sezónu)
+  allMatchesStatus: "idle",
+  statSort: "wins",    // řazení hráčů ve statistikách zápasů
   mult: 1,             // zvolený násobek (1 single, 2 double, 3 triple)
   oppInput: "",        // zbytek soupeře, který se právě píše
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
@@ -300,6 +304,7 @@ function stopData() {
   state.tid = null;
   state.rounds = [];
   closeRound();
+  stopAllMatches();
   state.ready = { users: false, events: false, rsvps: false, tournaments: false, rounds: false, matches: false };
 }
 
@@ -809,7 +814,7 @@ function closeRound() {
 
 function viewMatches() {
   if (state.rid && !curRound()) closeRound();   // kolo mezitím někdo smazal
-  if (!state.rid) return state.mview === "liga" ? viewLiga() : viewRounds();
+  if (!state.rid) return state.mview === "liga" ? viewLiga() : state.mview === "stats" ? viewSeasonStats() : viewRounds();
   const r = curRound();
   if (!state.ready.matches) return `<p class="muted">Načítám zápasy…</p>`;
   if (state.mslot) {
@@ -830,12 +835,19 @@ function viewRounds() {
   return html;
 }
 
+const OUTCOME = {
+  win: { label: "🏆 Výhra", banner: "🏆 Vyhráli jsme!" },
+  loss: { label: "Prohra", banner: "Tentokrát to nevyšlo" },
+  draw: { label: "Remíza", banner: "Remíza" }
+};
+
 function roundCard(r) {
   const played = r.played || 0;
   const pct = Math.round((played / SLOT_COUNT) * 100);
+  const out = roundOutcome(r);
   return `
-    <button class="tour ${played >= SLOT_COUNT ? "finished" : played ? "running" : "draft"}" data-action="round-open" data-id="${r.id}">
-      <span class="tour-head"><strong class="tour-name">${esc(TEAM_NAME)} vs. ${esc(r.opponent)}</strong></span>
+    <button class="tour ${played >= SLOT_COUNT ? "finished" : played ? "running" : "draft"} ${out ? `result-${out}` : ""}" data-action="round-open" data-id="${r.id}">
+      <span class="tour-head"><strong class="tour-name">${esc(TEAM_NAME)} vs. ${esc(r.opponent)}</strong>${out ? `<span class="outcome ${out}">${OUTCOME[out].label}</span>` : ""}</span>
       <span class="muted">${dateText(r.date)}</span>
       <span class="round-score">${r.ourWins || 0} : ${r.oppWins || 0}</span>
       <span class="tour-state">Odehráno ${played} z ${SLOT_COUNT}</span>
@@ -873,6 +885,7 @@ function slotRow(n, nextN) {
 function viewRound(r) {
   const all = [...state.matches.values()];
   const sum = roundSummary(all);
+  const outcome = roundOutcome({ ...sum, played: sum.played });
   const manage = canManageRound(r);
   const nextN = Array.from({ length: SLOT_COUNT }, (_, i) => i + 1).find((n) => !state.matches.get(n));
 
@@ -882,11 +895,12 @@ function viewRound(r) {
       <div><h1>vs. ${esc(r.opponent)}</h1><p class="muted meta">${dateText(r.date)}</p></div>
       ${manage ? `<button class="btn" data-action="round-edit" data-id="${r.id}">Upravit</button>` : ""}
     </div>
-    <div class="roundscore">
+    <div class="roundscore ${outcome || ""}">
       <span class="rs-team">${esc(TEAM_NAME)}</span>
       <span class="rs-num">${sum.ourWins} : ${sum.oppWins}</span>
       <span class="rs-team">${esc(r.opponent)}</span>
     </div>
+    ${outcome ? `<p class="outcomebar ${outcome}">${OUTCOME[outcome].banner}</p>` : ""}
     <h2>Zápasy</h2>
     <div class="slots">${Array.from({ length: SLOT_COUNT }, (_, i) => slotRow(i + 1, nextN)).join("")}</div>`;
 
@@ -894,12 +908,22 @@ function viewRound(r) {
     .sort((a, b) => a.slot - b.slot);
   if (singles.length) {
     const totals = playerTotals(all);
+    const tt = teamTotals(all);
+    const oppRows = opponentTotals(all);
     html += `<h2>Naši hráči</h2>
       <div class="tablewrap"><table class="standings small">
         <thead><tr><th>Hráč</th><th>Zápasy</th><th>Legy</th><th>Průměr</th><th>95+</th><th>133+</th><th>170+</th><th>180</th><th>Betony</th><th>Pokuta</th></tr></thead>
         <tbody>${totals.map((p) => `<tr><td class="nm">${esc(p.name)}</td><td>${p.won}:${p.lost}</td><td>${p.legsW}:${p.legsL}</td><td>${fmtAvg(p.avg)}</td><td>${p.c95}</td><td>${p.c133}</td><td>${p.c170}</td><td>${p.n180}</td><td>${p.beton}</td><td>${p.fine} Kč</td></tr>`).join("")}</tbody>
+        <tfoot><tr><td class="nm">Celkem</td><td>${tt.won}:${tt.lost}</td><td>${tt.legsW}:${tt.legsL}</td><td>${fmtAvg(tt.avg)}</td><td>${tt.c95}</td><td>${tt.c133}</td><td>${tt.c170}</td><td>${tt.n180}</td><td>${tt.beton}</td><td>${tt.fine} Kč</td></tr></tfoot>
       </table></div>
-      <p class="fine">Pokuty za betony v tomto kole: <strong>${totals.reduce((sum, p) => sum + p.fine, 0)} Kč</strong></p>
+      <p class="fine">Pokuty za betony v tomto kole: <strong>${tt.fine} Kč</strong></p>
+      <h2>Hráči soupeře</h2>
+      <p class="muted">U soupeře se sleduje jen výsledek a křížky.</p>
+      <div class="tablewrap"><table class="standings small">
+        <thead><tr><th>Hráč</th><th>Zápasy</th><th>Legy</th><th>95+</th><th>133+</th><th>170+</th></tr></thead>
+        <tbody>${oppRows.map((p) => `<tr><td class="nm">${esc(p.name)}</td><td>${p.won}:${p.lost}</td><td>${p.legsW}:${p.legsL}</td><td>${p.c95}</td><td>${p.c133}</td><td>${p.c170}</td></tr>`).join("")}</tbody>
+        <tfoot><tr><td class="nm">Celkem</td><td>${tt.opp.won}:${tt.opp.lost}</td><td>${tt.opp.legsW}:${tt.opp.legsL}</td><td>${tt.opp.c95}</td><td>${tt.opp.c133}</td><td>${tt.opp.c170}</td></tr></tfoot>
+      </table></div>
       <h2>Přehled pro zápis do ligy</h2>
       <p class="muted">Křížky obou stran z každého zápasu: 95+, 133+ a 170+.</p>
       <div class="tablewrap"><table class="standings small league">
@@ -912,6 +936,102 @@ function viewRound(r) {
           return `<tr><td>${m.slot}</td><td class="nm">${esc(m.ourName)}</td><td class="nm">${esc(m.oppName)}</td><td>${t.our}:${t.opp}</td><td>${a.c95}</td><td>${a.c133}</td><td>${a.c170}</td><td>${b.c95}</td><td>${b.c133}</td><td>${b.c170}</td></tr>`;
         }).join("")}</tbody>
       </table></div>`;
+  }
+  return html;
+}
+
+/* ----- statistiky zápasů za všechna kola ----- */
+
+let allMatchesUnsub = null;
+
+function startAllMatches() {
+  if (allMatchesUnsub) return;
+  state.allMatchesStatus = "loading";
+  allMatchesUnsub = onSnapshot(collectionGroup(db, "matches"), (snap) => {
+    state.allMatches = snap.docs.map((d) => ({ id: d.id, roundId: d.ref.parent.parent.id, ...d.data() }));
+    state.allMatchesStatus = "ok";
+    render();
+  }, () => {
+    allMatchesUnsub = null;
+    state.allMatchesStatus = "error";
+    render();
+  });
+}
+
+function stopAllMatches() {
+  if (allMatchesUnsub) { allMatchesUnsub(); allMatchesUnsub = null; }
+  state.allMatches = [];
+  state.allMatchesStatus = "idle";
+}
+
+const STAT_SORTS = {
+  wins: ["Výhry", (a, b) => b.won - a.won || b.avg - a.avg],
+  avg: ["Průměr", (a, b) => b.avg - a.avg],
+  cross: ["Křížky", (a, b) => (b.c95 + b.c133 + b.c170) - (a.c95 + a.c133 + a.c170) || b.avg - a.avg],
+  beton: ["Betony", (a, b) => b.beton - a.beton]
+};
+
+function viewSeasonStats() {
+  const head = segControl();
+  if (state.allMatchesStatus === "idle") {
+    setTimeout(startAllMatches, 0);
+    return `${head}<p class="muted">Načítám statistiky…</p>`;
+  }
+  if (state.allMatchesStatus === "loading") return `${head}<p class="muted">Načítám statistiky…</p>`;
+  if (state.allMatchesStatus === "error") {
+    return `${head}<div class="empty"><p><strong>Statistiky se nepodařilo načíst.</strong></p>
+      <p>Zkontroluj, jestli jsou ve Firebase zveřejněná nejnovější pravidla (soubor firestore.rules).</p></div>
+      <p><button class="btn" data-action="stats-reload">Zkusit znovu</button></p>`;
+  }
+
+  const all = state.allMatches;
+  const t = teamTotals(all);
+  const nameOf = (p) => state.users.get(p.id)?.displayName || p.name;
+  const players = playerTotals(all).sort(STAT_SORTS[state.statSort]?.[1] || STAT_SORTS.wins[1]);
+
+  const outcomes = state.rounds.map((r) => roundOutcome(r));
+  const rw = outcomes.filter((o) => o === "win").length;
+  const rd = outcomes.filter((o) => o === "draw").length;
+  const rl = outcomes.filter((o) => o === "loss").length;
+
+  let html = `${head}<div class="bar"><h1>Statistiky</h1></div>`;
+  if (!all.some((m) => (m.legs || []).length) && !state.rounds.length) {
+    return html + `<div class="empty"><p><strong>Zatím není z čeho počítat.</strong></p><p>Statistiky se naplní, jakmile se zapíše první zápas v nějakém kole.</p></div>`;
+  }
+
+  const tile = (label, value, note) => `<div class="tile"><span class="tl">${label}</span><strong>${value}</strong>${note ? `<small class="muted">${note}</small>` : ""}</div>`;
+  html += `<div class="tiles">
+    ${tile("Kola", `${rw}–${rd}–${rl}`, "výhry, remízy, prohry")}
+    ${tile("Zápasy", `${t.won}:${t.lost}`, `jednotlivci, legy ${t.legsW}:${t.legsL}`)}
+    ${tile("Průměr týmu", fmtAvg(t.avg), "ze všech zápasů")}
+    ${tile("Naše křížky", `${t.c95} / ${t.c133} / ${t.c170}`, "95+ / 133+ / 170+")}
+    ${tile("Křížky soupeřů", `${t.opp.c95} / ${t.opp.c133} / ${t.opp.c170}`, "95+ / 133+ / 170+")}
+    ${tile("Betony", t.beton, `pokuty ${t.fine} Kč`)}
+  </div>`;
+
+  html += `<h2>Naši hráči</h2>
+    <label class="sortpick">Řadit podle
+      <select data-action="stat-sort" aria-label="Řazení hráčů">${Object.entries(STAT_SORTS).map(([k, [label]]) => `<option value="${k}" ${state.statSort === k ? "selected" : ""}>${label}</option>`).join("")}</select>
+    </label>`;
+  if (!players.length) {
+    html += `<p class="muted">Zatím tu nejsou žádné zapsané zápasy hráčů.</p>`;
+  } else {
+    html += `<div class="tablewrap"><table class="standings small seasontable">
+      <thead><tr><th>Hráč</th><th>Hrál</th><th>V:P</th><th>Legy</th><th>Průměr</th><th>95+</th><th>133+</th><th>170+</th><th>180</th><th>Betony</th><th>Pokuta</th></tr></thead>
+      <tbody>${players.map((p) => `<tr><td class="nm"><span class="who">${p.id && state.users.has(p.id) ? avatarOf(p.id, nameOf(p)) : avatar(nameOf(p))}<span>${esc(nameOf(p))}</span></span></td><td>${p.matches}</td><td>${p.won}:${p.lost}</td><td>${p.legsW}:${p.legsL}</td><td>${fmtAvg(p.avg)}</td><td>${p.c95}</td><td>${p.c133}</td><td>${p.c170}</td><td>${p.n180}</td><td>${p.beton}</td><td>${p.fine} Kč</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td class="nm">Celkem</td><td>${t.played}</td><td>${t.won}:${t.lost}</td><td>${t.legsW}:${t.legsL}</td><td>${fmtAvg(t.avg)}</td><td>${t.c95}</td><td>${t.c133}</td><td>${t.c170}</td><td>${t.n180}</td><td>${t.beton}</td><td>${t.fine} Kč</td></tr></tfoot>
+    </table></div>
+    <p class="muted legend">Hrál = zápasy se zapsanými šipkami, V:P výhry a prohry v jednotlivcích. Průměr je z celku (všechny body děleno všemi šipkami). Týmovka a kriket se nezapisují po šipkách, takže v nich nejsou.</p>`;
+  }
+
+  if (state.rounds.length) {
+    html += `<h2>Kola</h2><div class="slots">${state.rounds.map((r) => {
+      const out = roundOutcome(r);
+      return `<button class="slot ${out === "win" ? "won" : out === "loss" ? "lost" : ""}" data-action="round-open" data-id="${r.id}">
+        <span class="no" aria-hidden="true">${out === "win" ? "🏆" : out === "loss" ? "✗" : out === "draw" ? "=" : "…"}</span>
+        <span class="slot-name">vs. ${esc(r.opponent)} <span class="muted">${dateText(r.date)}</span></span>
+        <span class="slot-res">${r.ourWins || 0} : ${r.oppWins || 0}</span></button>`;
+    }).join("")}</div>`;
   }
   return html;
 }
@@ -930,7 +1050,7 @@ function seg(items, active, action) {
   return `<div class="seg" role="group" aria-label="Zobrazení">${items.map(([v, label]) =>
     `<button class="${active === v ? "on" : ""}" data-action="${action}" data-v="${v}" aria-pressed="${active === v}">${label}</button>`).join("")}</div>`;
 }
-const segControl = () => seg([["rounds", "Zápisy"], ["liga", "Liga"]], state.mview, "mview");
+const segControl = () => seg([["rounds", "Zápisy"], ["liga", "Liga"], ["stats", "Statistiky"]], state.mview, "mview");
 const tournamentSeg = () => seg([["list", "Turnaje"], ["stats", "Statistiky"]], state.tview, "tview");
 
 async function loadLiga() {
@@ -1890,7 +2010,8 @@ document.addEventListener("click", async (e) => {
       case "profile": openProfileDialog(); break;
       case "changelog": openChangelogDialog(); break;
       case "tview": state.tview = t.dataset.v === "stats" ? "stats" : "list"; render(); window.scrollTo(0, 0); break;
-      case "mview": state.mview = t.dataset.v === "liga" ? "liga" : "rounds"; render(); window.scrollTo(0, 0); break;
+      case "mview": state.mview = ["liga", "stats"].includes(t.dataset.v) ? t.dataset.v : "rounds"; render(); window.scrollTo(0, 0); break;
+      case "stats-reload": stopAllMatches(); render(); break;
       case "liga-reload": state.liga = { status: "idle", data: null, error: "" }; render(); break;
       case "liga-cols": state.ligaAll = !state.ligaAll; render(); break;
       case "liga-new-round": {
@@ -1961,6 +2082,8 @@ document.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("change", (e) => {
+  const ss = e.target.closest("[data-action='stat-sort']");
+  if (ss) { state.statSort = ss.value; render(); return; }
   const sel = e.target.closest("[data-action='h2h']");
   if (!sel) return;
   const prev = state.h2h || {};

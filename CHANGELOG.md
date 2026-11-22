@@ -3,6 +3,13 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.15 (22. 11. 2026)
+
+- Výhra, prohra nebo remíza kola je vidět na kartě kola i v jeho detailu: u výhry zlatý 🏆 Výhra, zlaté skóre a nápis Vyhráli jsme.
+- V detailu kola jsou součty nahoře i dole: v tabulce našich hráčů řádek Celkem a nová tabulka Hráči soupeře (H1, H2…) s jejich zápasy, legy a křížky 95+, 133+ a 170+ a taky s řádkem Celkem.
+- V záložce Zápasy je nový přepínač Statistiky za všechna kola: bilance kol, skóre zápasů, průměr týmu, naše křížky a křížky soupeřů, betony a pokuty a tabulka hráčů, kterou jde řadit podle výher, průměru, křížků nebo betonů.
+- Přepínač v Zápasech má tři položky (Zápisy, Liga, Statistiky).
+
 ## Verze 0.14.1 (22. 11. 2026)
 
 - Opraveno datum u verzí 0.13 a 0.14 v přehledu změn.

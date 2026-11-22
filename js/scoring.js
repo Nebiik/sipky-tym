@@ -252,3 +252,54 @@ export function playerTotals(matches) {
   return [...map.values()].map((p) => ({ ...p, avg: p.darts ? (p.points / p.darts) * 3 : 0, fine: p.beton * BETON_FINE }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 }
+
+/* ---------- výsledek kola, soupeři a součty přes všechna kola ---------- */
+
+export const ROUND_MATCHES = 18;
+
+// Jak kolo dopadlo. Kolo je rozhodnuté, když se odehrálo všech 18 zápasů, nebo když jedna strana vyhrála
+// aspoň 10 (víc než polovinu, soupeř už to nemůže dohnat). Jinak se ještě hraje (vrací null).
+export function roundOutcome(r) {
+  const w = r?.ourWins || 0;
+  const l = r?.oppWins || 0;
+  if ((r?.played || 0) >= ROUND_MATCHES) return w > l ? "win" : l > w ? "loss" : "draw";
+  if (w >= ROUND_MATCHES / 2 + 1) return "win";
+  if (l >= ROUND_MATCHES / 2 + 1) return "loss";
+  return null;
+}
+
+// Hráči soupeře: u soupeře sledujeme jen výsledky a křížky.
+export function opponentTotals(matches) {
+  const map = new Map();
+  for (const m of matches) {
+    if (m.kind !== "single" || !(m.legs || []).length) continue;
+    if (!map.has(m.oppId)) map.set(m.oppId, { id: m.oppId, name: m.oppName, matches: 0, won: 0, lost: 0, legsW: 0, legsL: 0, c95: 0, c133: 0, c170: 0 });
+    const p = map.get(m.oppId);
+    const st = sideStats(m.legs, "opp");
+    const t = tally(m.legs);
+    p.matches++; p.legsW += t.opp; p.legsL += t.our;
+    p.c95 += st.c95; p.c133 += st.c133; p.c170 += st.c170;
+    if (m.status === "done") {
+      const r = m.result || { our: 0, opp: 0 };
+      if (r.opp > r.our) p.won++; else if (r.our > r.opp) p.lost++;
+    }
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "cs", { numeric: true }));
+}
+
+// Součty celého týmu (naši hráči i soupeři) z libovolného seznamu zápasů.
+export function teamTotals(matches) {
+  const ours = playerTotals(matches);
+  const sum = (arr, k) => arr.reduce((s, p) => s + p[k], 0);
+  const points = sum(ours, "points");
+  const darts = sum(ours, "darts");
+  const opp = opponentTotals(matches);
+  return {
+    played: sum(ours, "matches"), won: sum(ours, "won"), lost: sum(ours, "lost"),
+    legsW: sum(ours, "legsW"), legsL: sum(ours, "legsL"),
+    avg: darts ? (points / darts) * 3 : 0,
+    c95: sum(ours, "c95"), c133: sum(ours, "c133"), c170: sum(ours, "c170"), n180: sum(ours, "n180"),
+    beton: sum(ours, "beton"), fine: sum(ours, "fine"),
+    opp: { won: sum(opp, "won"), lost: sum(opp, "lost"), legsW: sum(opp, "legsW"), legsL: sum(opp, "legsL"), c95: sum(opp, "c95"), c133: sum(opp, "c133"), c170: sum(opp, "c170") }
+  };
+}

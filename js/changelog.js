@@ -1,7 +1,17 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.14.1";
+export const VERSION = "0.15";
 
 export const CHANGELOG = [
+  {
+    version: "0.15",
+    date: "22. 11. 2026",
+    changes: [
+      "Výhra, prohra nebo remíza kola je vidět na kartě kola i v jeho detailu: u výhry zlatý 🏆 Výhra, zlaté skóre a nápis Vyhráli jsme.",
+      "V detailu kola jsou součty nahoře i dole: v tabulce našich hráčů řádek Celkem a nová tabulka Hráči soupeře (H1, H2…) s jejich zápasy, legy a křížky 95+, 133+ a 170+ a taky s řádkem Celkem.",
+      "V záložce Zápasy je nový přepínač Statistiky za všechna kola: bilance kol, skóre zápasů, průměr týmu, naše křížky a křížky soupeřů, betony a pokuty a tabulka hráčů, kterou jde řadit podle výher, průměru, křížků nebo betonů.",
+      "Přepínač v Zápasech má tři položky (Zápisy, Liga, Statistiky)."
+    ]
+  },
   {
     version: "0.14.1",
     date: "22. 11. 2026",

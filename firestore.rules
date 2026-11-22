@@ -191,6 +191,11 @@ service cloud.firestore {
       }
     }
 
+    // Umožní jedním dotazem načíst zápasy ze všech kol (statistiky za celou sezónu).
+    match /{path=**}/matches/{mid} {
+      allow read: if isMember();
+    }
+
     // Umožní jedním dotazem načíst hlasování ke všem událostem.
     match /{path=**}/rsvps/{uid} {
       allow read: if isMember();

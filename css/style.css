@@ -518,7 +518,7 @@ body.scoring #toast { bottom: auto; top: calc(.8rem + env(safe-area-inset-top));
 .fine { margin: .6rem 0 0; padding: .6rem .85rem; background: var(--panel); border-left: 4px solid var(--brass); border-radius: 8px; }
 
 /* liga ze sipky.org */
-.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 1.1rem; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; margin-bottom: 1.1rem; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
 .seg button { min-height: 44px; font-weight: 700; color: var(--dim); background: none; border: 0; border-radius: 10px; }
 .seg button.on { background: var(--cream); color: var(--ink); }
 .ligahero {
@@ -585,3 +585,30 @@ h2.first { margin-top: 0; }
 .lu.subs .lp { background: none; box-shadow: inset 0 0 0 1px var(--line); }
 .lu.subs .lp.no { box-shadow: inset 0 0 0 1.5px var(--red-text); }
 .nolineup, .homeline { margin: .2rem 0 0; font-size: .92rem; }
+
+/* výsledek kola a statistiky zápasů */
+.outcome { flex: none; padding: .1rem .65rem; font-size: .85rem; font-weight: 700; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; }
+.outcome.win { color: var(--ink); background: var(--brass); border-color: var(--brass); }
+.outcome.loss { color: var(--red-text); border-color: var(--red-text); }
+.outcome.draw { color: var(--dim); }
+.tour.result-win { border-left-color: var(--brass); background: linear-gradient(0deg, rgba(212, 180, 106, .08), rgba(212, 180, 106, .08)), var(--panel); }
+.tour.result-loss { border-left-color: var(--red); }
+.tour.result-win .round-score { color: var(--brass); }
+.roundscore.win { border-color: var(--green); }
+.roundscore.loss { border-color: var(--red); }
+.outcomebar { margin: .6rem 0 0; padding: .6rem 1rem; text-align: center; font-weight: 800; font-size: 1.15rem; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.outcomebar.win { color: var(--ink); background: var(--brass); border-color: var(--brass); }
+.outcomebar.loss { color: var(--red-text); }
+.standings tfoot td { font-weight: 700; background: var(--panel-2); border-top: 2px solid var(--line); }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-bottom: .5rem; }
+.tile { display: grid; gap: .1rem; padding: .75rem .85rem; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.tile .tl { color: var(--dim); font-size: .85rem; font-weight: 600; }
+.tile strong { font-family: "Bricolage Grotesque", system-ui, sans-serif; font-size: 1.45rem; line-height: 1.15; overflow-wrap: anywhere; }
+.tile small { font-size: .8rem; }
+.sortpick { display: flex; align-items: center; gap: .6rem; margin: 0 0 .7rem; font-weight: 600; }
+.sortpick select { width: auto; }
+.seasontable .who { gap: .5rem; }
+.seasontable .av { width: 1.7rem; height: 1.7rem; font-size: .66rem; }
+.seasontable td.nm { white-space: nowrap; }
+.seasontable th:first-child, .seasontable td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); }
+.seasontable tfoot td:first-child { background: var(--panel-2); }
