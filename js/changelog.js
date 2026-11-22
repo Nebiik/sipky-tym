@@ -1,10 +1,17 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.14";
+export const VERSION = "0.14.1";
 
 export const CHANGELOG = [
   {
+    version: "0.14.1",
+    date: "22. 11. 2026",
+    changes: [
+      "Opraveno datum u verzí 0.13 a 0.14 v přehledu změn."
+    ]
+  },
+  {
     version: "0.14",
-    date: "20. 11. 2026",
+    date: "22. 11. 2026",
     changes: [
       "U události typu Zápas jde vybrat základní sestavu (nejvýš 4 hráči) a náhradníky (libovolný počet) ze všech členů týmu. Hráč je buď v sestavě, nebo mezi náhradníky.",
       "U zápasu jde zaškrtnout Domácí zápas a vybrat, kdo dělá občerstvení. U jmen je vidět, kolikrát už je na občerstvení zapsaný, aby se šlo spravedlivě střídat.",
@@ -14,7 +21,7 @@ export const CHANGELOG = [
   },
   {
     version: "0.13",
-    date: "20. 11. 2026",
+    date: "listopad 2026",
     changes: [
       "V seznamu turnajů je u dokončeného turnaje vidět vítěz s pohárem a barvou jeho kolečka. Při shodě na prvním místě jsou uvedeni všichni.",
       "Turnaje jsou rozdělené na probíhající a dokončené.",
