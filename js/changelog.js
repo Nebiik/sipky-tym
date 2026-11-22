@@ -1,7 +1,17 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.13";
+export const VERSION = "0.14";
 
 export const CHANGELOG = [
+  {
+    version: "0.14",
+    date: "20. 11. 2026",
+    changes: [
+      "U události typu Zápas jde vybrat základní sestavu (nejvýš 4 hráči) a náhradníky (libovolný počet) ze všech členů týmu. Hráč je buď v sestavě, nebo mezi náhradníky.",
+      "U zápasu jde zaškrtnout Domácí zápas a vybrat, kdo dělá občerstvení. U jmen je vidět, kolikrát už je na občerstvení zapsaný, aby se šlo spravedlivě střídat.",
+      "Sestava, náhradníci a občerstvení jsou vidět na kartě události. U každého hráče je značka, jak hlasoval (✓ můžu, ✗ nemůžu, ? nehlasoval).",
+      "Když z ligového rozpisu zakládáš kolo k utkání a ve stejný den je událost Zápas, hráči kola se předvyplní ze sestavy a náhradníků."
+    ]
+  },
   {
     version: "0.13",
     date: "20. 11. 2026",

@@ -56,25 +56,31 @@ service cloud.firestore {
     }
 
     // Události (trénink, zápas, akce).
+    // Zkontroluje tvar události. Sestava, náhradníci, domácí zápas a občerstvení jsou nepovinné
+    // (starší události je nemají).
+    function eventOk(d) {
+      return d.keys().hasOnly(['type', 'title', 'startsAt', 'location', 'notes', 'createdBy', 'createdAt', 'lineup', 'subs', 'home', 'catering'])
+        && d.type in ['training', 'match', 'party', 'other']
+        && d.title is string
+        && d.title.size() <= 80
+        && d.startsAt is timestamp
+        && (!('lineup' in d) || (d.lineup is list && d.lineup.size() <= 4))
+        && (!('subs' in d) || (d.subs is list && d.subs.size() <= 30))
+        && (!('home' in d) || d.home is bool)
+        && (!('catering' in d) || (d.catering is list && d.catering.size() <= 6));
+    }
+
     match /events/{eventId} {
       allow read: if isMember();
 
       allow create: if isMember()
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.keys().hasOnly(['type', 'title', 'startsAt', 'location', 'notes', 'createdBy', 'createdAt'])
-        && request.resource.data.type in ['training', 'match', 'party', 'other']
-        && request.resource.data.title is string
-        && request.resource.data.title.size() <= 80
-        && request.resource.data.startsAt is timestamp;
+        && eventOk(request.resource.data);
 
       allow update: if isMember()
         && (isAdmin() || resource.data.createdBy == request.auth.uid)
         && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.keys().hasOnly(['type', 'title', 'startsAt', 'location', 'notes', 'createdBy', 'createdAt'])
-        && request.resource.data.type in ['training', 'match', 'party', 'other']
-        && request.resource.data.title is string
-        && request.resource.data.title.size() <= 80
-        && request.resource.data.startsAt is timestamp;
+        && eventOk(request.resource.data);
 
       allow delete: if isMember()
         && (isAdmin() || resource.data.createdBy == request.auth.uid);

@@ -477,6 +477,29 @@ function viewEvents() {
   return html;
 }
 
+// Sestava, náhradníci a občerstvení u zápasu. Každý má značku podle toho, jak hlasoval.
+function lineupBlock(ev, votes) {
+  if (ev.type !== "match") return "";
+  const known = (list) => (list || []).filter((u) => state.users.has(u));
+  const lineup = known(ev.lineup);
+  const subs = known(ev.subs);
+  const catering = known(ev.catering);
+  const person = (uid) => {
+    const u = state.users.get(uid);
+    const v = votes.get(uid)?.status;
+    const [cls, mark, label] = v === "yes" ? ["yes", "✓", "Můžu"] : v === "no" ? ["no", "✗", "Nemůžu"] : ["none", "?", "Nehlasoval"];
+    return `<li class="lp ${cls}">${avatarOf(uid, u.displayName)}<span>${esc(u.displayName)}</span><span class="vote" title="${label}" aria-label="${label}">${mark}</span></li>`;
+  };
+  let html = "";
+  if (lineup.length) html += `<p class="lu-title">Základní sestava</p><ul class="lu">${lineup.map(person).join("")}</ul>`;
+  if (subs.length) html += `<p class="lu-title">Náhradníci</p><ul class="lu subs">${subs.map(person).join("")}</ul>`;
+  if (!lineup.length && !subs.length) html += `<p class="muted nolineup">Sestava zatím není zadaná.</p>`;
+  if (ev.home) {
+    html += `<p class="homeline">🏠 Domácí zápas, 🍺 občerstvení: ${catering.length ? `<strong>${catering.map((u) => esc(state.users.get(u).displayName)).join(", ")}</strong>` : `<span class="muted">zatím nikdo</span>`}</p>`;
+  }
+  return `<div class="lineup">${html}</div>`;
+}
+
 function eventCard(ev, hero = false) {
   const t = TYPES[ev.type] || TYPES.other;
   const d = ev.startsAt.toDate();
@@ -530,7 +553,8 @@ function eventCard(ev, hero = false) {
   const details = `
     <p class="when">${esc(weekdayLong(d))} ${d.getDate()}. ${d.getMonth() + 1}. v ${timeText(d)}</p>
     ${ev.location ? `<p class="where">📍 ${esc(ev.location)}</p>` : ""}
-    ${ev.notes ? `<p class="notes">${esc(ev.notes)}</p>` : ""}`;
+    ${ev.notes ? `<p class="notes">${esc(ev.notes)}</p>` : ""}
+    ${lineupBlock(ev, votes)}`;
 
   const edit = canEdit ? `<button class="link edit" data-action="edit-event" data-id="${ev.id}">Upravit</button>` : "";
 
@@ -1293,10 +1317,39 @@ $dlg.addEventListener("click", (e) => {
   if (e.target === $dlg) closeDialog();
 });
 
+const MAX_LINEUP = 4;
+
+// Kolikrát je kdo už zapsaný na občerstvení u domácích zápasů (bez právě upravované události).
+function cateringCounts(excludeId) {
+  const m = new Map();
+  for (const e of state.events) {
+    if (e.id === excludeId || e.type !== "match" || !e.home) continue;
+    for (const u of e.catering || []) m.set(u, (m.get(u) || 0) + 1);
+  }
+  return m;
+}
+
+function updateLineupCounts(form) {
+  if (!form) return;
+  const n = form.querySelectorAll("input[name=lineup]:checked").length;
+  const m = form.querySelectorAll("input[name=subs]:checked").length;
+  const l = form.querySelector("#lcount");
+  const sc = form.querySelector("#scount");
+  if (l) l.textContent = `(${n} ze ${MAX_LINEUP})`;
+  if (sc) sc.textContent = m ? `(${m})` : "";
+}
+
 function openEventDialog(id) {
   const ev = id ? state.events.find((e) => e.id === id) : null;
   const d = ev ? ev.startsAt.toDate() : defaultStart();
   const curType = ev?.type || "training";
+  const members = [...state.users.values()].filter((u) => isMemberRole(u.role)).sort(byName);
+  const counts = cateringCounts(id);
+  const chips = (name, set, extra) => members.map((u) => `
+    <label class="chip"><input type="checkbox" name="${name}" value="${esc(u.id)}" ${set.has(u.id) ? "checked" : ""}><span>${esc(u.displayName)}${extra ? extra(u) : ""}</span></label>`).join("");
+  const lineupSel = new Set(ev?.lineup || []);
+  const subsSel = new Set(ev?.subs || []);
+  const cateringSel = new Set(ev?.catering || []);
   $dlg.innerHTML = `
     <form id="evForm" class="stack" data-id="${id || ""}">
       <h2>${ev ? "Upravit událost" : "Nová událost"}</h2>
@@ -1308,7 +1361,23 @@ function openEventDialog(id) {
       <label>Název<input name="title" maxlength="80" placeholder="Např. Trénink na automatu" value="${esc(ev?.title || "")}"></label>
       <label>Kdy<input type="datetime-local" name="when" required value="${toLocalInput(d)}"></label>
       <label>Kde<input name="location" maxlength="120" placeholder="Např. Podchod klub, Brno" value="${esc(ev?.location || "")}"></label>
-      <label>Poznámka<textarea name="notes" rows="3" maxlength="500" placeholder="Co přinést, kdo dělá občerstvení…">${esc(ev?.notes || "")}</textarea></label>
+      <div id="matchFields" class="matchfields" ${curType === "match" ? "" : "hidden"}>
+        <label class="check"><input type="checkbox" name="home" ${ev?.home ? "checked" : ""}><span>Domácí zápas</span></label>
+        <fieldset class="players">
+          <legend>Základní sestava <span id="lcount" class="muted"></span></legend>
+          <div class="chips">${chips("lineup", lineupSel)}</div>
+        </fieldset>
+        <fieldset class="players">
+          <legend>Náhradníci <span id="scount" class="muted"></span></legend>
+          <div class="chips">${chips("subs", subsSel)}</div>
+        </fieldset>
+        <fieldset class="players" id="cateringBox" ${ev?.home ? "" : "hidden"}>
+          <legend>Kdo dělá občerstvení</legend>
+          <div class="chips">${chips("catering", cateringSel, (u) => (counts.get(u.id) ? ` <small class="muted">${counts.get(u.id)}×</small>` : ""))}</div>
+          <p class="muted hint">Číslo ukazuje, kolikrát už je u domácích zápasů zapsaný na občerstvení.</p>
+        </fieldset>
+      </div>
+      <label>Poznámka<textarea name="notes" rows="3" maxlength="500" placeholder="Co přinést, na co myslet…">${esc(ev?.notes || "")}</textarea></label>
       <div class="actions">
         ${ev ? `<button type="button" class="btn danger" data-dlg="delete" data-id="${ev.id}">Smazat událost</button>` : ""}
         <span class="spacer"></span>
@@ -1317,6 +1386,7 @@ function openEventDialog(id) {
       </div>
     </form>`;
   $dlg.showModal();
+  updateLineupCounts($dlg.querySelector("#evForm"));
 }
 
 function openNoteDialog(id) {
@@ -1433,7 +1503,7 @@ function openMatchDialog(tid, mid) {
 function openRoundDialog(id, preset) {
   const r = id ? state.rounds.find((x) => x.id === id) : null;
   dlgGuests = r ? (r.ourPlayers || []).filter((p) => !p.uid).map((p) => ({ id: p.id, name: p.name })) : [];
-  const selected = new Set(r ? (r.ourPlayers || []).filter((p) => p.uid).map((p) => p.uid) : []);
+  const selected = new Set(r ? (r.ourPlayers || []).filter((p) => p.uid).map((p) => p.uid) : preset?.members || []);
   const members = [...state.users.values()].filter((u) => isMemberRole(u.role)).sort(byName);
   const d = r ? r.date.toDate() : preset?.date || new Date();
   const dateVal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -1829,7 +1899,10 @@ document.addEventListener("click", async (e) => {
         if (!f) break;
         const homeUs = normTeam(f.home) === normTeam(d.team);
         const when = new Date(`${f.date}T12:00:00`);
-        openRoundDialog(null, { opponent: homeUs ? f.away : f.home, date: isNaN(when) ? undefined : when });
+        // když existuje událost Zápas ve stejný den, vezme se z ní sestava a náhradníci
+        const ev = isNaN(when) ? null : state.events.find((e) => e.type === "match" && sameDay(e.startsAt.toDate(), when));
+        const members = ev ? [...(ev.lineup || []), ...(ev.subs || [])].filter((u) => state.users.has(u)) : [];
+        openRoundDialog(null, { opponent: homeUs ? f.away : f.home, date: isNaN(when) ? undefined : when, members });
         break;
       }
       case "round-new": openRoundDialog(); break;
@@ -1930,6 +2003,27 @@ document.addEventListener("change", (e) => {
   }
 });
 
+document.addEventListener("change", (e) => {
+  const f = e.target.closest("#evForm");
+  if (!f) return;
+  const { name } = e.target;
+  if (name === "type") f.querySelector("#matchFields").hidden = e.target.value !== "match";
+  if (name === "home") f.querySelector("#cateringBox").hidden = !e.target.checked;
+  if (name === "lineup" || name === "subs") {
+    if (e.target.checked) {
+      // hráč je buď v sestavě, nebo mezi náhradníky
+      const other = name === "lineup" ? "subs" : "lineup";
+      const twin = f.querySelector(`input[name=${other}][value="${CSS.escape(e.target.value)}"]`);
+      if (twin) twin.checked = false;
+      if (name === "lineup" && f.querySelectorAll("input[name=lineup]:checked").length > MAX_LINEUP) {
+        e.target.checked = false;
+        toast(`V základní sestavě je nejvíc ${MAX_LINEUP} hráči.`);
+      }
+    }
+    updateLineupCounts(f);
+  }
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.id === "guestName") {
     e.preventDefault();
@@ -1967,12 +2061,21 @@ document.addEventListener("submit", async (e) => {
       const type = fd.get("type");
       const when = new Date(fd.get("when"));
       if (isNaN(when)) { toast("Zadej platné datum a čas."); return; }
+      // sestava, domácí zápas a občerstvení mají smysl jen u zápasu, u ostatních druhů se vyprázdní
+      const isMatch = type === "match";
+      const home = isMatch && fd.get("home") === "on";
+      const lineup = isMatch ? fd.getAll("lineup") : [];
+      if (lineup.length > MAX_LINEUP) { toast(`V základní sestavě je nejvíc ${MAX_LINEUP} hráči.`); return; }
       const data = {
         type,
         title: (fd.get("title") || "").trim() || TYPES[type].label,
         startsAt: Timestamp.fromDate(when),
         location: (fd.get("location") || "").trim(),
-        notes: (fd.get("notes") || "").trim()
+        notes: (fd.get("notes") || "").trim(),
+        lineup,
+        subs: isMatch ? fd.getAll("subs").filter((u) => !lineup.includes(u)) : [],
+        home,
+        catering: home ? fd.getAll("catering") : []
       };
       const id = f.dataset.id;
       if (id) {

@@ -566,3 +566,22 @@ h2.first { margin-top: 0; }
 .h2hlist { margin-top: .9rem; }
 .h2hlist td.nm { white-space: normal; }
 .h2hlist td:first-child { white-space: nowrap; }
+
+/* sestava, náhradníci a občerstvení u zápasu */
+[hidden] { display: none !important; }
+.matchfields { display: grid; grid-template-columns: minmax(0, 1fr); gap: .95rem; }
+.hint { font-size: .85rem; margin: .5rem 0 0; }
+.chip input:checked + span small { color: var(--ink); opacity: .65; }
+.lineup { display: grid; gap: .4rem; margin-top: .7rem; }
+.lu-title { margin: .2rem 0 0; font-size: .85rem; color: var(--dim); font-weight: 600; }
+.lu { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .35rem; }
+.lp { display: inline-flex; align-items: center; gap: .4rem; padding: .15rem .65rem .15rem .2rem; font-size: .93rem; background: var(--panel-2); border-radius: 999px; }
+.lp .av { width: 1.55rem; height: 1.55rem; font-size: .62rem; }
+.lp .vote { font-size: .82rem; font-weight: 800; }
+.lp.yes .vote { color: var(--green-text); }
+.lp.no { box-shadow: inset 0 0 0 1.5px var(--red-text); }
+.lp.no .vote { color: var(--red-text); }
+.lp.none .vote { color: var(--dim); }
+.lu.subs .lp { background: none; box-shadow: inset 0 0 0 1px var(--line); }
+.lu.subs .lp.no { box-shadow: inset 0 0 0 1.5px var(--red-text); }
+.nolineup, .homeline { margin: .2rem 0 0; font-size: .92rem; }
