@@ -3,14 +3,18 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
-## Verze 0.14 (20. 11. 2026)
+## Verze 0.14.1 (22. 11. 2026)
+
+- Opraveno datum u verzí 0.13 a 0.14 v přehledu změn.
+
+## Verze 0.14 (22. 11. 2026)
 
 - U události typu Zápas jde vybrat základní sestavu (nejvýš 4 hráči) a náhradníky (libovolný počet) ze všech členů týmu. Hráč je buď v sestavě, nebo mezi náhradníky.
 - U zápasu jde zaškrtnout Domácí zápas a vybrat, kdo dělá občerstvení. U jmen je vidět, kolikrát už je na občerstvení zapsaný, aby se šlo spravedlivě střídat.
 - Sestava, náhradníci a občerstvení jsou vidět na kartě události. U každého hráče je značka, jak hlasoval (✓ můžu, ✗ nemůžu, ? nehlasoval).
 - Když z ligového rozpisu zakládáš kolo k utkání a ve stejný den je událost Zápas, hráči kola se předvyplní ze sestavy a náhradníků.
 
-## Verze 0.13 (20. 11. 2026)
+## Verze 0.13 (listopad 2026)
 
 - V seznamu turnajů je u dokončeného turnaje vidět vítěz s pohárem a barvou jeho kolečka. Při shodě na prvním místě jsou uvedeni všichni.
 - Turnaje jsou rozdělené na probíhající a dokončené.
