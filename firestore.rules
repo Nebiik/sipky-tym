@@ -85,6 +85,34 @@ service cloud.firestore {
       allow delete: if isMember()
         && (isAdmin() || resource.data.createdBy == request.auth.uid);
 
+      // Komentáře k události. Napsat smí každý člen (pod svým jménem), upravit jen autor,
+      // smazat autor, správce nebo autor události.
+      match /comments/{cid} {
+        allow read: if isMember();
+
+        allow create: if isMember()
+          && request.resource.data.keys().hasOnly(['uid', 'text', 'createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 300
+          && request.resource.data.createdAt == request.time;
+
+        allow update: if isMember()
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['uid', 'text', 'createdAt', 'editedAt'])
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 300;
+
+        allow delete: if isMember()
+          && (resource.data.uid == request.auth.uid
+              || isAdmin()
+              || get(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid);
+      }
+
       // Hlasování Můžu / Nemůžu. Každý hlasuje jen za sebe.
       match /rsvps/{uid} {
         allow create, update: if isMember() && request.auth.uid == uid
@@ -189,6 +217,11 @@ service cloud.firestore {
 
         allow delete: if isMember();
       }
+    }
+
+    // Umožní jedním dotazem načíst komentáře ke všem událostem.
+    match /{path=**}/comments/{cid} {
+      allow read: if isMember();
     }
 
     // Umožní jedním dotazem načíst zápasy ze všech kol (statistiky za celou sezónu).

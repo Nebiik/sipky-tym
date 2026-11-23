@@ -1,7 +1,18 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.17";
+export const VERSION = "0.18";
 
 export const CHANGELOG = [
+  {
+    version: "0.18",
+    date: "23. 11. 2026",
+    changes: [
+      "Komentáře k události místo poznámek k hlasování: ukazují se přímo na kartě události se jménem autora, jeho barevným kolečkem a časem (dnes, včera, nebo datum). Komentář může přidat kdokoli, i bez hlasování, a víckrát.",
+      "Vlastní komentář jde upravit (pak se u něj ukáže upraveno) a smazat. Správce a autor události může smazat i cizí komentář. Cizí komentář upravit nejde.",
+      "Zobrazují se poslední tři komentáře, starší se rozbalí odkazem Starší komentáře.",
+      "Dřívější poznámky k hlasování se nezahodily: ukazují se jako komentáře svých autorů a autor je může smazat. Dřív byly vidět jen po rozkliknutí Kdo přesně.",
+      "Smazáním události se smažou i její komentáře."
+    ]
+  },
   {
     version: "0.17",
     date: "23. 11. 2026",

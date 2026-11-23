@@ -59,12 +59,14 @@ const state = {
   padBeton: 0,         // počet betonů vybraný pro kolo našeho hráče
   padUsed: 3,          // šipek na zavření (jen náš hráč)
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
+  comments: [],        // komentáře ke všem událostem {id, eventId, uid, text, createdAt, editedAt}
+  expandedComments: new Set(),
   view: "events",
   showPast: false,
   expanded: new Set(),
   pendingName: null,
   dataOn: false,
-  ready: { users: false, events: false, rsvps: false, tournaments: false, rounds: false, matches: false },
+  ready: { users: false, events: false, rsvps: false, tournaments: false, rounds: false, matches: false, comments: false },
   privChecked: false,
   creating: false
 };
@@ -265,6 +267,18 @@ function startData() {
     toast(errMsg(e));
   }));
 
+  dataUnsubs.push(onSnapshot(collectionGroup(db, "comments"), (s) => {
+    state.comments = s.docs.map((d) => ({ id: d.id, eventId: d.ref.parent.parent.id, ...d.data({ serverTimestamps: "estimate" }) }));
+    state.ready.comments = true;
+    render();
+  }, () => {
+    // kdyby chyběla nová pravidla ve Firebase, události dál fungují jen bez komentářů
+    state.comments = [];
+    state.ready.comments = true;
+    render();
+    toast("Komentáře se nepodařilo načíst. Zkontroluj nová pravidla ve Firebase.");
+  }));
+
   dataUnsubs.push(onSnapshot(collectionGroup(db, "rsvps"), (s) => {
     const m = new Map();
     s.docs.forEach((d) => {
@@ -302,11 +316,12 @@ function stopData() {
   state.events = [];
   state.rsvps = new Map();
   state.tournaments = [];
+  state.comments = [];
   state.tid = null;
   state.rounds = [];
   closeRound();
   stopAllMatches();
-  state.ready = { users: false, events: false, rsvps: false, tournaments: false, rounds: false, matches: false };
+  state.ready = { users: false, events: false, rsvps: false, tournaments: false, rounds: false, matches: false, comments: false };
 }
 
 /* ---------- vykreslování ---------- */
@@ -506,6 +521,92 @@ function lineupBlock(ev, votes) {
   return `<div class="lineup">${html}</div>`;
 }
 
+/* ----- komentáře k události ----- */
+
+const COMMENT_MAX = 300;
+const COMMENTS_SHOWN = 3;
+
+function commentTime(ts) {
+  const d = ts?.toDate ? ts.toDate() : null;
+  if (!d) return "právě teď";
+  const hm = `${d.getHours()}:${pad(d.getMinutes())}`;
+  const now = new Date();
+  if (sameDay(d, now)) return `dnes ${hm}`;
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (sameDay(d, yesterday)) return `včera ${hm}`;
+  return `${d.getDate()}. ${d.getMonth() + 1}. ${hm}`;
+}
+
+// Komentáře události od nejstaršího. Starší poznámky k hlasování se ukážou jako komentáře jejich autorů.
+function eventComments(ev, votes) {
+  const list = state.comments.filter((c) => c.eventId === ev.id).map((c) => ({ ...c }));
+  for (const [uid, v] of votes) {
+    if (v.note) list.push({ id: `note-${uid}`, legacy: true, uid, text: v.note, createdAt: v.updatedAt });
+  }
+  const ms = (c) => (c.createdAt?.toDate ? c.createdAt.toDate().getTime() : Infinity);
+  return list.sort((a, b) => ms(a) - ms(b));
+}
+
+function commentsBlock(ev, votes, upcoming) {
+  const all = eventComments(ev, votes);
+  if (!all.length && !upcoming) return "";
+  const expanded = state.expandedComments.has(ev.id);
+  const hidden = expanded ? 0 : Math.max(0, all.length - COMMENTS_SHOWN);
+  const shown = hidden ? all.slice(-COMMENTS_SHOWN) : all;
+  const admin = state.me.role === "admin";
+
+  const item = (c) => {
+    const u = state.users.get(c.uid);
+    const name = u?.displayName || "Bývalý člen";
+    const mine = c.uid === state.user.uid;
+    const actions = [];
+    if (c.legacy) {
+      if (mine) actions.push(`<button class="link" data-action="comment-legacy-del" data-id="${ev.id}">Smazat</button>`);
+    } else {
+      if (mine) actions.push(`<button class="link" data-action="comment-edit" data-id="${ev.id}" data-cid="${esc(c.id)}">Upravit</button>`);
+      if (mine || admin) actions.push(`<button class="link danger" data-action="comment-del" data-id="${ev.id}" data-cid="${esc(c.id)}">Smazat</button>`);
+    }
+    return `
+      <li class="cm">
+        ${u ? avatarOf(c.uid, name) : avatar(name)}
+        <div class="cm-body">
+          <p class="cm-meta"><strong>${esc(name)}</strong> <span class="muted">${esc(commentTime(c.createdAt))}${c.editedAt ? ", upraveno" : ""}</span></p>
+          <p class="cm-text">${esc(c.text)}</p>
+          ${actions.length ? `<p class="cm-actions">${actions.join("")}</p>` : ""}
+        </div>
+      </li>`;
+  };
+
+  return `
+    <div class="comments">
+      <div class="cm-head">
+        ${all.length ? `<h4>Komentáře (${all.length})</h4>` : "<span></span>"}
+        <button class="link" data-action="comment-new" data-id="${ev.id}">Přidat komentář</button>
+      </div>
+      ${hidden ? `<button class="link cm-more" data-action="comments-more" data-id="${ev.id}">Starší komentáře (${hidden})</button>` : ""}
+      ${shown.length ? `<ul class="cm-list">${shown.map(item).join("")}</ul>` : ""}
+      ${expanded && all.length > COMMENTS_SHOWN ? `<button class="link cm-more" data-action="comments-more" data-id="${ev.id}">Skrýt starší komentáře</button>` : ""}
+    </div>`;
+}
+
+function openCommentDialog(eid, cid) {
+  const ev = state.events.find((e) => e.id === eid);
+  const c = cid ? state.comments.find((x) => x.id === cid) : null;
+  $dlg.innerHTML = `
+    <form id="commentForm" class="stack" data-eid="${eid}" data-cid="${cid || ""}">
+      <h2>${c ? "Upravit komentář" : "Nový komentář"}</h2>
+      <p class="muted">${esc(ev?.title || "")}. Komentář uvidí všichni v týmu a bude u něj tvoje jméno.</p>
+      <label>Komentář<textarea name="text" rows="4" maxlength="${COMMENT_MAX}" required placeholder="Např. přijdu až v 16:30" autofocus>${esc(c?.text || "")}</textarea></label>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-dlg="close">Zrušit</button>
+        <button type="submit" class="btn primary">${c ? "Uložit změny" : "Přidat komentář"}</button>
+      </div>
+    </form>`;
+  $dlg.showModal();
+}
+
 function eventCard(ev, hero = false) {
   const t = TYPES[ev.type] || TYPES.other;
   const d = ev.startsAt.toDate();
@@ -520,10 +621,7 @@ function eventCard(ev, hero = false) {
   const n = daysUntil(d);
   const title = ev.title || t.label;
 
-  const person = (u) => {
-    const note = votes.get(u.id)?.note;
-    return `<li>${esc(u.displayName)}${note ? ` <small>${esc(note)}</small>` : ""}</li>`;
-  };
+  const person = (u) => `<li>${esc(u.displayName)}</li>`;
   const group = (label, list, cls) =>
     `<div class="grp ${cls}"><h4>${label} (${list.length})</h4>${list.length ? `<ul>${list.map(person).join("")}</ul>` : `<p class="muted">Nikdo.</p>`}</div>`;
 
@@ -538,7 +636,6 @@ function eventCard(ev, hero = false) {
     <div class="rsvp">
       <button class="btn yes ${mine?.status === "yes" ? "on" : ""}" data-action="rsvp" data-id="${ev.id}" data-status="yes" aria-pressed="${mine?.status === "yes"}">Můžu</button>
       <button class="btn no ${mine?.status === "no" ? "on" : ""}" data-action="rsvp" data-id="${ev.id}" data-status="no" aria-pressed="${mine?.status === "no"}">Nemůžu</button>
-      ${mine ? `<button class="btn ghost" data-action="note" data-id="${ev.id}">${mine.note ? "Upravit poznámku" : "Přidat poznámku"}</button>` : ""}
     </div>`;
 
   const meter = `
@@ -572,6 +669,7 @@ function eventCard(ev, hero = false) {
         ${details}
         ${rsvp}
         ${tally}
+        ${commentsBlock(ev, votes, true)}
       </article>`;
   }
   return `
@@ -582,6 +680,7 @@ function eventCard(ev, hero = false) {
         ${details}
         ${n >= 0 ? rsvp : ""}
         ${tally}
+        ${commentsBlock(ev, votes, n >= 0)}
       </div>
     </article>`;
 }
@@ -1515,21 +1614,6 @@ function openEventDialog(id, preset) {
   updateLineupCounts($dlg.querySelector("#evForm"));
 }
 
-function openNoteDialog(id) {
-  const cur = state.rsvps.get(id)?.get(state.user.uid);
-  $dlg.innerHTML = `
-    <form id="noteForm" class="stack" data-id="${id}">
-      <h2>Poznámka k hlasování</h2>
-      <label>Poznámka<input name="note" maxlength="200" placeholder="Např. dorazím později" value="${esc(cur?.note || "")}" autofocus></label>
-      <div class="actions">
-        <span class="spacer"></span>
-        <button type="button" class="btn" data-dlg="close">Zrušit</button>
-        <button type="submit" class="btn primary">Uložit poznámku</button>
-      </div>
-    </form>`;
-  $dlg.showModal();
-}
-
 let dlgGuests = [];
 
 function updatePlayerCount() {
@@ -1765,6 +1849,7 @@ async function deleteEvent(id) {
   if (votes) {
     for (const uid of votes.keys()) await deleteDoc(doc(db, "events", id, "rsvps", uid));
   }
+  for (const c of state.comments.filter((x) => x.eventId === id)) await deleteDoc(doc(db, "events", id, "comments", c.id));
   await deleteDoc(doc(db, "events", id));
   closeDialog();
   toast("Událost je smazaná.");
@@ -1984,8 +2069,20 @@ document.addEventListener("click", async (e) => {
       case "new-event": openEventDialog(); break;
       case "edit-event": openEventDialog(id); break;
       case "rsvp": await setRsvp(id, status); break;
-      case "note":
-        openNoteDialog(id);
+      case "comment-new": openCommentDialog(id); break;
+      case "comment-edit": openCommentDialog(id, t.dataset.cid); break;
+      case "comment-del":
+        if (!confirm("Smazat komentář?")) break;
+        await deleteDoc(doc(db, "events", id, "comments", t.dataset.cid));
+        toast("Komentář je smazaný.");
+        break;
+      case "comment-legacy-del":
+        if (!confirm("Smazat tvoji starou poznámku k hlasování?")) break;
+        await updateDoc(doc(db, "events", id, "rsvps", state.user.uid), { note: "", updatedAt: serverTimestamp() });
+        break;
+      case "comments-more":
+        state.expandedComments.has(id) ? state.expandedComments.delete(id) : state.expandedComments.add(id);
+        render();
         break;
       case "profile": openProfileDialog(); break;
       case "changelog": openChangelogDialog(); break;
@@ -2212,12 +2309,18 @@ document.addEventListener("submit", async (e) => {
       return;
     }
 
-    if (f.id === "noteForm") {
-      await updateDoc(doc(db, "events", f.dataset.id, "rsvps", state.user.uid), {
-        note: (fd.get("note") || "").trim().slice(0, 200),
-        updatedAt: serverTimestamp()
-      });
+    if (f.id === "commentForm") {
+      const text = (fd.get("text") || "").trim().slice(0, COMMENT_MAX);
+      if (!text) { toast("Napiš komentář."); return; }
+      const eid = f.dataset.eid;
+      const cid = f.dataset.cid;
+      if (cid) {
+        await updateDoc(doc(db, "events", eid, "comments", cid), { text, editedAt: serverTimestamp() });
+      } else {
+        await addDoc(collection(db, "events", eid, "comments"), { uid: state.user.uid, text, createdAt: serverTimestamp() });
+      }
       closeDialog();
+      toast(cid ? "Komentář je upravený." : "Komentář je přidaný.");
       return;
     }
 

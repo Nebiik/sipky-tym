@@ -629,3 +629,19 @@ h2.first { margin-top: 0; }
 .panel.side-our .num.ok { background: var(--green); border-color: var(--green); color: var(--on-green); }
 .keypad .num { min-height: 48px; }
 .betonrow button { min-height: 42px; }
+
+/* komentáře k události */
+.comments { margin-top: .9rem; padding-top: .7rem; border-top: 1px dashed var(--line); }
+.cm-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.cm-head h4 { color: var(--dim); font-size: .9rem; }
+.cm-more { display: block; margin: .4rem 0 .2rem; font-size: .9rem; }
+.cm-list { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .7rem; }
+.cm { display: flex; gap: .6rem; align-items: flex-start; }
+.cm .av { width: 1.9rem; height: 1.9rem; font-size: .7rem; margin-top: .1rem; }
+.cm-body { min-width: 0; }
+.cm-body p { margin: 0; }
+.cm-meta { font-size: .9rem; }
+.cm-text { overflow-wrap: anywhere; white-space: pre-wrap; }
+.cm-actions { margin-top: .15rem !important; display: flex; gap: .9rem; }
+.cm-actions .link { font-size: .85rem; color: var(--dim); }
+.cm-actions .link.danger { color: var(--red-text); }

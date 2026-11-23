@@ -3,6 +3,14 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.18 (23. 11. 2026)
+
+- Komentáře k události místo poznámek k hlasování: ukazují se přímo na kartě události se jménem autora, jeho barevným kolečkem a časem (dnes, včera, nebo datum). Komentář může přidat kdokoli, i bez hlasování, a víckrát.
+- Vlastní komentář jde upravit (pak se u něj ukáže upraveno) a smazat. Správce a autor události může smazat i cizí komentář. Cizí komentář upravit nejde.
+- Zobrazují se poslední tři komentáře, starší se rozbalí odkazem Starší komentáře.
+- Dřívější poznámky k hlasování se nezahodily: ukazují se jako komentáře svých autorů a autor je může smazat. Dřív byly vidět jen po rozkliknutí Kdo přesně.
+- Smazáním události se smažou i její komentáře.
+
 ## Verze 0.17 (23. 11. 2026)
 
 - V Lize je u našeho utkání (jen pro správce) tlačítko Založit událost. Otevře formulář předvyplněný z rozpisu: Zápas, název Zápas s (soupeř), datum a čas, místo, číslo kola a skupina v poznámce.
