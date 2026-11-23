@@ -1,7 +1,18 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.15.1";
+export const VERSION = "0.16";
 
 export const CHANGELOG = [
+  {
+    version: "0.16",
+    date: "23. 11. 2026",
+    changes: [
+      "Náš hráč se při zápisu zadává stejně jako soupeř: napíšeš, kolik mu po kole zbývá. Body za kolo, průměr a křížky se dopočítají. Šipky se už nezadávají.",
+      "Betony se zadávají ručně tlačítky 1× až 4× nad klávesnicí (v jednom kole jich je nejvýš 4). Automatické počítání betonů a otázka Bylo to zavírání jsou pryč. Nezavřený leg na středy dál dává 1 beton navíc.",
+      "Při zavření našeho hráče jde zvolit, kolik šipek na to použil (výchozí jsou 3), aby seděl průměr.",
+      "Panel zápisu je barevně rozlišený: zelený pro našeho hráče a červený pro soupeře, stejně jako zvýraznění strany na tabuli.",
+      "Starší zápasy zapsané po šipkách se zobrazují beze změny a jdou dohrát novým zápisem."
+    ]
+  },
   {
     version: "0.15.1",
     date: "23. 11. 2026",

@@ -612,3 +612,20 @@ h2.first { margin-top: 0; }
 .seasontable td.nm { white-space: nowrap; }
 .seasontable th:first-child, .seasontable td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); }
 .seasontable tfoot td:first-child { background: var(--panel-2); }
+
+/* zápis kola: zelený panel pro našeho hráče, červený pro soupeře */
+.panel.side-our { background: linear-gradient(rgba(47, 154, 99, .18), rgba(47, 154, 99, .18)), var(--panel); border-color: var(--green); }
+.panel.side-opp { background: linear-gradient(rgba(214, 58, 47, .18), rgba(214, 58, 47, .18)), var(--panel); border-color: var(--red); }
+.bside.our.turn { border-color: var(--green); }
+.bside.opp.turn { border-color: var(--red); }
+.sidetag { flex: none; padding: .1rem .65rem; border-radius: 999px; font-size: .8rem; font-weight: 800; }
+.sidetag.our { background: var(--green); color: var(--on-green); }
+.sidetag.opp { background: var(--red); color: var(--on-red); }
+.opphead h2 { flex: 1; min-width: 0; font-size: 1.05rem; }
+.betonrow { display: flex; align-items: center; gap: .4rem; margin: 0 0 .5rem; }
+.betonrow .lbl { flex: none; width: 3.1rem; color: var(--dim); font-weight: 600; }
+.betonrow button { flex: 1; min-height: 44px; font-weight: 700; color: var(--cream); background: var(--panel-2); border: 1.5px solid var(--line); border-radius: 10px; }
+.betonrow button.on { background: var(--red); color: var(--on-red); border-color: var(--red); }
+.panel.side-our .num.ok { background: var(--green); border-color: var(--green); color: var(--on-green); }
+.keypad .num { min-height: 48px; }
+.betonrow button { min-height: 42px; }

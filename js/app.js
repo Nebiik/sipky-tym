@@ -15,9 +15,9 @@ import {
   tournamentWinners, playerRanking, headToHead
 } from "./tournament.js";
 import {
-  START, MISS, other, dartLabel, newLeg, remaining, turnOf, needsBull, curTotal, curRemaining,
-  addDart, checkOpp, addOpp, endLeg, undo, isEmptyLeg, crossOf, sideStats, tally, matchState,
-  roundSummary, playerTotals, pendingBeton, answerBeton, visitBetons, BETON_FINE,
+  START, other, dartLabel, newLeg, remaining, turnOf, needsBull,
+  checkEntry, addOur, addOpp, endLeg, undoVisit, isEmptyLeg, crossOf, sideStats, tally, matchState,
+  roundSummary, playerTotals, visitBetons, BETON_FINE,
   roundOutcome, opponentTotals, teamTotals
 } from "./scoring.js";
 
@@ -55,8 +55,9 @@ const state = {
   allMatches: [],      // zápasy ze všech kol (statistiky za celou sezónu)
   allMatchesStatus: "idle",
   statSort: "wins",    // řazení hráčů ve statistikách zápasů
-  mult: 1,             // zvolený násobek (1 single, 2 double, 3 triple)
-  oppInput: "",        // zbytek soupeře, který se právě píše
+  padInput: "",        // zbytek, který se právě píše na klávesnici
+  padBeton: 0,         // počet betonů vybraný pro kolo našeho hráče
+  padUsed: 3,          // šipek na zavření (jen náš hráč)
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
   view: "events",
   showPast: false,
@@ -808,7 +809,7 @@ function closeRound() {
   state.rid = null;
   state.mslot = null;
   state.matches = new Map();
-  state.oppInput = "";
+  resetPad();
   state.ready.matches = false;
 }
 
@@ -1186,47 +1187,51 @@ function visitsTable(leg) {
     <tbody>${rows}</tbody></table></div>`;
 }
 
-function dartPad() {
-  const mults = [[1, "Single"], [2, "Double"], [3, "Triple"]];
-  return `
-    <div class="pad">
-      <div class="mults">${mults.map(([v, l]) => `<button class="mult ${state.mult === v ? "on" : ""}" data-action="mult" data-v="${v}">${l}</button>`).join("")}</div>
-      <div class="nums">${Array.from({ length: 20 }, (_, i) => `<button class="num" data-action="dart" data-dn="${i + 1}">${i + 1}</button>`).join("")}</div>
-      <div class="specials">
-        <button class="num wide" data-action="dart" data-dn="0" data-dm="1">Vedle</button>
-        <button class="num wide" data-action="dart" data-dn="25" data-dm="1">Bull 25</button>
-        <button class="num wide" data-action="dart" data-dn="25" data-dm="2">Bullseye 50</button>
-      </div>
-    </div>`;
+const UNDO_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>`;
+
+function resetPad() {
+  state.padInput = "";
+  state.padBeton = 0;
+  state.padUsed = 3;
 }
 
-function oppPad(leg, m) {
-  const prev = remaining(leg, "opp");
-  const raw = state.oppInput;
+// Zápis kola jedné strany: píše se jen to, kolik hráči po kole zbývá. Body, průměr a křížky se dopočítají.
+function entryPad(leg, side) {
+  const prev = remaining(leg, side);
+  const raw = state.padInput;
   const val = raw === "" ? null : Number(raw);
-  const chk = val === null ? null : checkOpp(leg, val);
-  let preview = `<span class="muted">Zadej, kolik soupeři zbývá po jeho kole.</span>`;
+  const chk = val === null ? null : checkEntry(leg, side, val);
+  const ours = side === "our";
+  let preview = `<span class="muted">Zadej, kolik ${ours ? "mu" : "soupeři"} zbývá po kole.</span>`;
   if (chk && chk.ok) {
     preview = val === 0
-      ? `Soupeř zavřel z ${prev}.`
-      : `Soupeř hodil <strong>${chk.score}</strong>${crossMark(chk.score)}`;
+      ? `${ours ? "Zavřeno" : "Soupeř zavřel"} z ${prev}.${ours && state.padBeton ? ` <span class="muted">Beton se při zavření nepočítá.</span>` : ""}`
+      : `${ours ? "Hodil" : "Soupeř hodil"} <strong>${chk.score}</strong>${crossMark(chk.score)}`;
   } else if (chk) {
     preview = `<span class="err">${esc(chk.error)}</span>`;
   }
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((k) => `<button class="num" data-action="opp-key" data-k="${k}">${k}</button>`).join("");
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((k) => `<button class="num" data-action="pad-key" data-k="${k}">${k}</button>`).join("");
+  const betonRow = ours ? `
+    <div class="betonrow">
+      <span class="lbl">Beton</span>
+      ${[1, 2, 3, 4].map((n) => `<button class="${state.padBeton === n ? "on" : ""}" data-action="pad-beton" data-n="${n}" aria-pressed="${state.padBeton === n}">${n}×</button>`).join("")}
+    </div>` : "";
+  const usedRow = ours && raw === "0"
+    ? `<div class="usedrow"><span>Šipek na zavření</span>${[1, 2, 3].map((u) => `<button class="mult ${state.padUsed === u ? "on" : ""}" data-action="pad-used" data-u="${u}">${u}</button>`).join("")}</div>` : "";
   return `
     <div class="oppdisp">
       <span class="was">bylo ${prev}</span>
       <span class="val">${raw === "" ? "–" : esc(raw)}</span>
     </div>
     <p class="preview">${preview}</p>
+    ${usedRow}${betonRow}
     <div class="keypad">
       ${keys}
-      <button class="num" data-action="opp-del" aria-label="Smazat číslici">⌫</button>
-      <button class="num" data-action="opp-key" data-k="0">0</button>
-      <button class="num ok" data-action="opp-ok" ${chk && chk.ok ? "" : "disabled"}>Uložit</button>
+      <button class="num" data-action="pad-del" aria-label="Smazat číslici">⌫</button>
+      <button class="num" data-action="pad-key" data-k="0">0</button>
+      <button class="num ok" data-action="pad-ok" ${chk && chk.ok ? "" : "disabled"}>Uložit</button>
     </div>
-    <button class="btn wide ghost" data-action="opp-same">Beze změny (přehozeno nebo vedle)</button>`;
+    <button class="btn wide ghost" data-action="pad-same">Beze změny (přehozeno nebo vedle)</button>`;
 }
 
 function viewScoring(r, m) {
@@ -1238,8 +1243,7 @@ function viewScoring(r, m) {
   const turn = inLeg ? turnOf(last) : null;
   const so = sideStats(legs, "our");
   const sp = sideStats(legs, "opp");
-  const remShow = (side) => fresh ? START
-    : inLeg && side === "our" ? curRemaining(last) : remaining(last, side);
+  const remShow = (side) => (fresh ? START : remaining(last, side));
   const nm = (side) => (side === "our" ? m.ourName : m.oppName);
   const legWord = (n) => (n === 1 ? "vítězný leg" : n < 5 ? "vítězné legy" : "vítězných legů");
 
@@ -1277,20 +1281,6 @@ function viewScoring(r, m) {
           <button class="btn ${suggest === "opp" ? "primary" : ""}" data-action="leg-start" data-who="opp">${esc(nm("opp"))}</button>
         </div>
       </div>`;
-  } else if (pendingBeton(last)) {
-    const pv = pendingBeton(last);
-    const bm = pv.bmaybe || 0;
-    const bd = pv.bdef || 0;
-    panel = `
-      <div class="panel">
-        <div class="opphead"><h2>Beton?</h2><button class="undo" data-action="match-undo" aria-label="Vrátit poslední kolo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button></div>
-        <p>${esc(nm("our"))} hodil <strong>${pv.score}</strong> (${pv.darts.map(dartLabel).join(", ")}) ze zbytku ${pv.rem + pv.score}. Bylo to zavírání?</p>
-        ${bd ? `<p class="muted">${bd}× beton se počítá tak či tak.</p>` : ""}
-        <div class="duel">
-          <button class="btn" data-action="beton" data-v="0">Zavíral, nepočítat</button>
-          <button class="btn primary" data-action="beton" data-v="1">Beton ${bm}×, pokuta ${bm * BETON_FINE} Kč</button>
-        </div>
-      </div>`;
   } else if (needsBull(last)) {
     panel = `
       <div class="panel">
@@ -1301,19 +1291,18 @@ function viewScoring(r, m) {
           <button class="btn" data-action="leg-win" data-who="opp">${esc(nm("opp"))}</button>
         </div>
       </div>`;
-  } else if (turn === "our") {
-    const cur = last.cur;
-    panel = `
-      <div class="panel">
-        <div class="curvisit">
-          ${[0, 1, 2].map((i) => `<span class="dart ${cur[i] ? "" : "empty"}">${cur[i] ? dartLabel(cur[i]) : "–"}</span>`).join("")}
-          <span class="curtotal">= ${curTotal(last)}</span>
-          <button class="undo" data-action="match-undo" aria-label="Vrátit poslední šipku"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-        </div>
-        ${dartPad()}
-      </div>`;
   } else {
-    panel = `<div class="panel"><div class="opphead"><h2>${esc(nm("opp"))}, kolik zbývá?</h2><button class="undo" data-action="match-undo" aria-label="Vrátit poslední krok"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button></div>${oppPad(last, m)}</div>`;
+    // zapisuje se kolo našeho hráče (zelený panel) nebo soupeře (červený panel)
+    const side = turn;
+    panel = `
+      <div class="panel side-${side}">
+        <div class="opphead">
+          <span class="sidetag ${side}">${side === "our" ? "Náš hráč" : "Soupeř"}</span>
+          <h2>${esc(nm(side))}, kolik zbývá?</h2>
+          <button class="undo" data-action="match-undo" aria-label="Vrátit poslední kolo">${UNDO_ICON}</button>
+        </div>
+        ${entryPad(last, side)}
+      </div>`;
   }
 
   const hasHistory = legs.length > 0;
@@ -1829,56 +1818,34 @@ function handleSlot(n) {
   if (slotKind(n) !== "single") { openTeamDialog(n); return; }
   if (!state.matches.get(n)) { openMatchStartDialog(n); return; }
   state.mslot = n;
-  state.oppInput = "";
-  state.mult = 1;
+  resetPad();
   render();
   window.scrollTo(0, 0);
 }
 
 const actStartLeg = (who) => mutateMatch(state.mslot, (legs) => { legs.push(newLeg(who)); });
 
-async function actDart(n, mm) {
-  const mult = n === 0 || n === 25 ? mm : state.mult;
-  state.mult = 1;
+// Zápis kola: side je null, když se má vzít ta strana, která je na tahu.
+async function actEntry(side, value) {
+  let accepted = true;
   await mutateMatch(state.mslot, (legs) => {
     const leg = lastLegOf(legs);
-    if (!leg || leg.winner) return false;
-    const before = leg.visits.length;
-    const next = addDart(leg, { n, m: mult });
-    if (next === leg) return false;
-    legs[legs.length - 1] = next;
-    if (next.visits.length > before && next.visits[next.visits.length - 1].bust) toast("Přehozeno, kolo se nepočítá.");
+    if (!leg) { accepted = false; return false; }
+    const who = side || turnOf(leg);
+    const chk = checkEntry(leg, who, value);
+    if (!chk.ok) { toast(chk.error); accepted = false; return false; }
+    legs[legs.length - 1] = who === "our" ? addOur(leg, value, state.padUsed, state.padBeton) : addOpp(leg, value);
   });
+  if (accepted) { resetPad(); render(); }
 }
-
-async function actOpp(value) {
-  const ok = await (async () => {
-    let accepted = true;
-    await mutateMatch(state.mslot, (legs) => {
-      const leg = lastLegOf(legs);
-      if (!leg) { accepted = false; return false; }
-      const chk = checkOpp(leg, value);
-      if (!chk.ok) { toast(chk.error); accepted = false; return false; }
-      legs[legs.length - 1] = addOpp(leg, value);
-    });
-    return accepted;
-  })();
-  if (ok) { state.oppInput = ""; render(); }
-}
-
-const actBeton = (isBeton) => mutateMatch(state.mslot, (legs) => {
-  const leg = lastLegOf(legs);
-  if (!leg || !pendingBeton(leg)) return false;
-  legs[legs.length - 1] = answerBeton(leg, isBeton);
-});
 
 async function actUndo() {
-  state.oppInput = "";
+  resetPad();
   await mutateMatch(state.mslot, (legs) => {
     const leg = lastLegOf(legs);
     if (!leg) return false;
     if (isEmptyLeg(leg)) { legs.pop(); return; }
-    legs[legs.length - 1] = undo(leg);
+    legs[legs.length - 1] = undoVisit(leg);
   });
 }
 
@@ -1895,7 +1862,7 @@ async function actFinish() {
     return { status: "done", result: { our: ms.our, opp: ms.opp } };
   });
   state.mslot = null;
-  state.oppInput = "";
+  resetPad();
   render();
   window.scrollTo(0, 0);
   toast("Zápas je uložený.");
@@ -2039,24 +2006,24 @@ document.addEventListener("click", async (e) => {
       case "round-open": openRound(id); window.scrollTo(0, 0); break;
       case "round-back": closeRound(); render(); window.scrollTo(0, 0); break;
       case "slot": handleSlot(Number(t.dataset.n)); break;
-      case "match-back": state.mslot = null; state.oppInput = ""; render(); window.scrollTo(0, 0); break;
-      case "mult": { const v = Number(t.dataset.v); state.mult = state.mult === v ? 1 : v; render(); break; }
-      case "dart": await actDart(Number(t.dataset.dn), Number(t.dataset.dm || 1)); break;
+      case "match-back": state.mslot = null; resetPad(); render(); window.scrollTo(0, 0); break;
       case "leg-start": await actStartLeg(who); break;
       case "leg-win": await actLegWin(who); break;
-      case "opp-key":
-        if (state.oppInput.length < 3) {
-          state.oppInput = (state.oppInput === "0" ? "" : state.oppInput) + t.dataset.k;
+      case "pad-key":
+        if (state.padInput.length < 3) {
+          state.padInput = (state.padInput === "0" ? "" : state.padInput) + t.dataset.k;
           render();
         }
         break;
-      case "opp-del": state.oppInput = state.oppInput.slice(0, -1); render(); break;
-      case "opp-ok": await actOpp(Number(state.oppInput)); break;
-      case "beton": await actBeton(t.dataset.v === "1"); break;
-      case "opp-same": {
+      case "pad-del": state.padInput = state.padInput.slice(0, -1); render(); break;
+      case "pad-used": state.padUsed = Number(t.dataset.u); render(); break;
+      case "pad-beton": { const n = Number(t.dataset.n); state.padBeton = state.padBeton === n ? 0 : n; render(); break; }
+      case "pad-ok": await actEntry(null, Number(state.padInput)); break;
+      case "pad-same": {
         const legs = state.matches.get(state.mslot)?.legs || [];
         const leg = legs[legs.length - 1];
-        if (leg) await actOpp(remaining(leg, "opp"));
+        const who = leg ? turnOf(leg) : null;
+        if (who) await actEntry(who, remaining(leg, who));
         break;
       }
       case "match-undo": await actUndo(); break;
@@ -2321,8 +2288,7 @@ document.addEventListener("submit", async (e) => {
       const id = `m${slot}`;
       state.matches.set(slot, { id, ...data });
       state.mslot = slot;
-      state.oppInput = "";
-      state.mult = 1;
+      resetPad();
       closeDialog();
       render();
       window.scrollTo(0, 0);

@@ -3,6 +3,14 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.16 (23. 11. 2026)
+
+- Náš hráč se při zápisu zadává stejně jako soupeř: napíšeš, kolik mu po kole zbývá. Body za kolo, průměr a křížky se dopočítají. Šipky se už nezadávají.
+- Betony se zadávají ručně tlačítky 1× až 4× nad klávesnicí (v jednom kole jich je nejvýš 4). Automatické počítání betonů a otázka Bylo to zavírání jsou pryč. Nezavřený leg na středy dál dává 1 beton navíc.
+- Při zavření našeho hráče jde zvolit, kolik šipek na to použil (výchozí jsou 3), aby seděl průměr.
+- Panel zápisu je barevně rozlišený: zelený pro našeho hráče a červený pro soupeře, stejně jako zvýraznění strany na tabuli.
+- Starší zápasy zapsané po šipkách se zobrazují beze změny a jdou dohrát novým zápisem.
+
 ## Verze 0.15.1 (23. 11. 2026)
 
 - Oprava stahování ligy: když stránka ligy obsahuje i jinou tabulku se sloupci Domácí a Hosté (třeba výsledky), skript už kvůli tomu nepadá a vezme správný rozpis. Tabulka družstev se aktualizuje vždy.

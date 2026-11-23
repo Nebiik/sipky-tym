@@ -145,7 +145,7 @@ export function checkOpp(leg, rem) {
 
 // Kolo soupeře: zadáváme, kolik mu zbývá. used = počet šipek, jen když zavřel.
 export function addOpp(leg, rem, used = 3) {
-  const chk = checkOpp(leg, rem);
+  const chk = checkEntry(leg, "opp", rem);
   if (!chk.ok) return leg;
   const L = clone(leg);
   const out = rem === 0;
@@ -302,4 +302,52 @@ export function teamTotals(matches) {
     beton: sum(ours, "beton"), fine: sum(ours, "fine"),
     opp: { won: sum(opp, "won"), lost: sum(opp, "lost"), legsW: sum(opp, "legsW"), legsL: sum(opp, "legsL"), c95: sum(opp, "c95"), c133: sum(opp, "c133"), c170: sum(opp, "c170") }
   };
+}
+
+/* ---------- zápis našeho hráče stejně jako soupeře: jen kolik zbývá ---------- */
+
+export const MAX_VISIT_BETON = 4; // v jednom kole nejvýš 3x vedle a kolo pod 20
+
+// Kontrola zadaného zbytku pro libovolnou stranu (naši i soupeře).
+export function checkEntry(leg, side, rem) {
+  if (leg.winner || turnOf(leg) !== side || needsBull(leg)) return { ok: false, error: "Teď nehraje tenhle hráč." };
+  const prev = remaining(leg, side);
+  if (!Number.isInteger(rem) || rem < 0) return { ok: false, error: "Zadej, kolik zbývá." };
+  if (rem > prev) return { ok: false, error: `Zbývalo ${prev}, víc být nemůže.` };
+  if (rem === 1) return { ok: false, error: "Zbytek 1 nejde (double out)." };
+  const score = prev - rem;
+  if (score > 180 || IMPOSSIBLE_SCORES.has(score)) return { ok: false, error: `Hod ${score} se třemi šipkami nedá hodit.` };
+  if (rem === 0 && !canFinish(prev)) return { ok: false, error: `Ze zbytku ${prev} se zavřít nedá.` };
+  return { ok: true, score, prev };
+}
+
+// Kolo našeho hráče zadané jako zbytek. Šipky se nezapisují. used = šipek na zavření (jinak 3),
+// beton = počet betonů v kole, který zadal zapisovatel ručně (při zavření se nepočítá).
+export function addOur(leg, rem, used = 3, beton = 0) {
+  const chk = checkEntry(leg, "our", rem);
+  if (!chk.ok) return leg;
+  const L = clone(leg);
+  L.cur = []; // zbytek po dřívějším zápisu šipek se zahodí
+  const out = rem === 0;
+  const b = Number.isInteger(beton) ? Math.min(MAX_VISIT_BETON, Math.max(0, beton)) : 0;
+  L.visits.push({
+    by: "our", score: chk.score, rem,
+    used: out ? Math.min(3, Math.max(1, Number.isInteger(used) ? used : 3)) : 3,
+    beton: out ? 0 : b,
+    ...(out ? { out: true } : {})
+  });
+  if (out) { L.winner = "our"; L.end = "checkout"; }
+  return L;
+}
+
+// Vrátit poslední kolo (našeho hráče i soupeře) a vyčistit případné rozepsané šipky ze starého zápisu.
+export function undoVisit(leg) {
+  const L = clone(leg);
+  L.cur = [];
+  if (L.visits.length) {
+    L.visits.pop();
+    L.winner = null;
+    L.end = null;
+  }
+  return L;
 }
