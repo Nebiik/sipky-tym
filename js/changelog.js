@@ -1,7 +1,15 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.18";
+export const VERSION = "0.19";
 
 export const CHANGELOG = [
+  {
+    version: "0.19",
+    date: "23. 11. 2026",
+    changes: [
+      "Při zápisu zápasu je vlevo ten, kdo začíná leg, stejně jako budík na automatu. V dalším legu se strany obrátí. Mezi legy je vlevo ten, kdo má podle střídání začínat.",
+      "Stejně se řadí i sloupce v tabulce kol (u každého legu je vlevo začínající hráč) a hlavičky sloupců mají barvu strany."
+    ]
+  },
   {
     version: "0.18",
     date: "23. 11. 2026",

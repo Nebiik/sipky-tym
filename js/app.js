@@ -1280,17 +1280,22 @@ function viewLiga() {
 /* ----- zápis jednoho zápasu ----- */
 
 function visitsTable(leg) {
-  const our = leg.visits.filter((v) => v.by === "our");
-  const opp = leg.visits.filter((v) => v.by === "opp");
-  const n = Math.max(our.length, opp.length);
+  const bySide = {
+    our: leg.visits.filter((v) => v.by === "our"),
+    opp: leg.visits.filter((v) => v.by === "opp")
+  };
+  const n = Math.max(bySide.our.length, bySide.opp.length);
   if (!n) return "";
-  const cell = (v, withDarts) => v
-    ? `<td>${v.bust ? `<span class="bust">přehozeno</span>` : v.score}${v.bust ? "" : crossMark(v.score)}${visitBetons(v) ? ` <span class="bet">beton${visitBetons(v) > 1 ? ` ×${visitBetons(v)}` : ""}</span>` : ""}${withDarts && v.darts ? `<small class="muted darts">${v.darts.map(dartLabel).join(" ")}</small>` : ""}</td><td class="rm">${v.rem}</td>`
+  // kdo leg začal, má sloupce vlevo, stejně jako skóre na tabuli
+  const left = leg.starter === "opp" ? "opp" : "our";
+  const order = [left, other(left)];
+  const cell = (v) => v
+    ? `<td>${v.bust ? `<span class="bust">přehozeno</span>` : v.score}${v.bust ? "" : crossMark(v.score)}${visitBetons(v) ? ` <span class="bet">beton${visitBetons(v) > 1 ? ` ×${visitBetons(v)}` : ""}</span>` : ""}${v.by === "our" && v.darts ? `<small class="muted darts">${v.darts.map(dartLabel).join(" ")}</small>` : ""}</td><td class="rm">${v.rem}</td>`
     : `<td></td><td></td>`;
   let rows = "";
-  for (let i = n - 1; i >= 0; i--) rows += `<tr><td class="rn">${i + 1}</td>${cell(our[i], true)}${cell(opp[i], false)}</tr>`;
+  for (let i = n - 1; i >= 0; i--) rows += `<tr><td class="rn">${i + 1}</td>${order.map((side) => cell(bySide[side][i])).join("")}</tr>`;
   return `<div class="tablewrap"><table class="visits">
-    <thead><tr><th>Kolo</th><th>Naše</th><th>Zbývá</th><th>Soupeř</th><th>Zbývá</th></tr></thead>
+    <thead><tr><th>Kolo</th>${order.map((side) => `<th class="h-${side}">${side === "our" ? "Naše" : "Soupeř"}</th><th>Zbývá</th>`).join("")}</tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 
@@ -1358,9 +1363,12 @@ function viewScoring(r, m) {
   if (inLeg) status = `Leg ${legs.length}, začíná ${esc(nm(last.starter))}.`;
   else if (last) status = `Leg ${legs.length} vyhrál ${esc(nm(last.winner))}.`;
 
+  // Kdo začíná leg, má skóre vlevo (jako budík na automatu). Mezi legy je vlevo ten, kdo má začínat podle střídání.
+  const leftSide = fresh ? (last ? other(last.starter) : "our") : last.starter;
+  const sideOrder = leftSide === "opp" ? ["opp", "our"] : ["our", "opp"];
   const board = `
     <div class="board">
-      ${["our", "opp"].map((side) => `
+      ${sideOrder.map((side) => `
         <div class="bside ${side} ${turn === side ? "turn" : ""}">
           <div class="bname">${esc(nm(side))}</div>
           <div class="brem">${remShow(side)}</div>

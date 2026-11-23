@@ -3,6 +3,11 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.19 (23. 11. 2026)
+
+- Při zápisu zápasu je vlevo ten, kdo začíná leg, stejně jako budík na automatu. V dalším legu se strany obrátí. Mezi legy je vlevo ten, kdo má podle střídání začínat.
+- Stejně se řadí i sloupce v tabulce kol (u každého legu je vlevo začínající hráč) a hlavičky sloupců mají barvu strany.
+
 ## Verze 0.18 (23. 11. 2026)
 
 - Komentáře k události místo poznámek k hlasování: ukazují se přímo na kartě události se jménem autora, jeho barevným kolečkem a časem (dnes, včera, nebo datum). Komentář může přidat kdokoli, i bez hlasování, a víckrát.

@@ -645,3 +645,5 @@ h2.first { margin-top: 0; }
 .cm-actions { margin-top: .15rem !important; display: flex; gap: .9rem; }
 .cm-actions .link { font-size: .85rem; color: var(--dim); }
 .cm-actions .link.danger { color: var(--red-text); }
+.visits th.h-our { color: var(--green-text); }
+.visits th.h-opp { color: var(--red-text); }
