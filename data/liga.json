@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-11-21T20:54:56.598Z",
-  "sourceSync": "21.11.2026 21:48",
+  "checkedAt": "2026-11-23T06:33:59.302Z",
+  "sourceSync": "23.11.2026 06:48",
   "source": "sipky.org (UŠO, systém Leguan)",
   "sourceUrl": "https://www.sipky.org/?region=jmoss&page=ligova-skupina&league=82945",
   "group": "2. liga C (neděle)",
@@ -10,6 +10,22 @@
     {
       "rank": 1,
       "team": "Kouzelníci z Yellow Fish",
+      "played": 7,
+      "v": 7,
+      "vp": 0,
+      "r": 0,
+      "pp": 0,
+      "p": 0,
+      "k": 0,
+      "scoreFor": 100,
+      "scoreAgainst": 26,
+      "legsFor": 214,
+      "legsAgainst": 90,
+      "points": 21
+    },
+    {
+      "rank": 2,
+      "team": "Bastr team Brno",
       "played": 6,
       "v": 6,
       "vp": 0,
@@ -17,27 +33,11 @@
       "pp": 0,
       "p": 0,
       "k": 0,
-      "scoreFor": 87,
-      "scoreAgainst": 21,
-      "legsFor": 186,
-      "legsAgainst": 73,
+      "scoreFor": 73,
+      "scoreAgainst": 35,
+      "legsFor": 162,
+      "legsAgainst": 98,
       "points": 18
-    },
-    {
-      "rank": 2,
-      "team": "Bastr team Brno",
-      "played": 5,
-      "v": 5,
-      "vp": 0,
-      "r": 0,
-      "pp": 0,
-      "p": 0,
-      "k": 0,
-      "scoreFor": 62,
-      "scoreAgainst": 28,
-      "legsFor": 135,
-      "legsAgainst": 80,
-      "points": 15
     },
     {
       "rank": 3,
@@ -58,50 +58,50 @@
     {
       "rank": 4,
       "team": "DC Zmije Třebíč",
-      "played": 6,
+      "played": 7,
       "v": 3,
       "vp": 2,
       "r": 0,
       "pp": 1,
-      "p": 0,
+      "p": 1,
       "k": 0,
-      "scoreFor": 67,
-      "scoreAgainst": 44,
-      "legsFor": 155,
-      "legsAgainst": 112,
+      "scoreFor": 72,
+      "scoreAgainst": 57,
+      "legsFor": 172,
+      "legsAgainst": 140,
       "points": 14
     },
     {
       "rank": 5,
       "team": "Zálesáci",
-      "played": 6,
+      "played": 7,
       "v": 4,
-      "vp": 0,
-      "r": 0,
-      "pp": 0,
-      "p": 2,
-      "k": 0,
-      "scoreFor": 64,
-      "scoreAgainst": 44,
-      "legsFor": 151,
-      "legsAgainst": 110,
-      "points": 12
-    },
-    {
-      "rank": 6,
-      "team": "Šipkaři Budišov",
-      "played": 6,
-      "v": 3,
       "vp": 0,
       "r": 0,
       "pp": 0,
       "p": 3,
       "k": 0,
-      "scoreFor": 51,
-      "scoreAgainst": 57,
-      "legsFor": 125,
-      "legsAgainst": 139,
-      "points": 9
+      "scoreFor": 71,
+      "scoreAgainst": 55,
+      "legsFor": 169,
+      "legsAgainst": 137,
+      "points": 12
+    },
+    {
+      "rank": 6,
+      "team": "Šipkaři Budišov",
+      "played": 7,
+      "v": 4,
+      "vp": 0,
+      "r": 0,
+      "pp": 0,
+      "p": 3,
+      "k": 0,
+      "scoreFor": 64,
+      "scoreAgainst": 62,
+      "legsFor": 154,
+      "legsAgainst": 152,
+      "points": 12
     },
     {
       "rank": 7,
@@ -138,17 +138,17 @@
     {
       "rank": 9,
       "team": "DC Womitz killers Omice",
-      "played": 5,
+      "played": 6,
       "v": 1,
       "vp": 0,
       "r": 0,
       "pp": 0,
-      "p": 4,
+      "p": 5,
       "k": 0,
-      "scoreFor": 36,
-      "scoreAgainst": 54,
-      "legsFor": 88,
-      "legsAgainst": 127,
+      "scoreFor": 41,
+      "scoreAgainst": 67,
+      "legsFor": 101,
+      "legsAgainst": 156,
       "points": 3
     },
     {
@@ -187,51 +187,6 @@
   "fixtures": [
     {
       "day": "Ne",
-      "date": "2026-11-22",
-      "time": "15:00",
-      "round": 8,
-      "home": "Double Trouble Brno",
-      "away": "Podchod klub Brno",
-      "venue": "Bohunická šipka, Brno"
-    },
-    {
-      "day": "Ne",
-      "date": "2026-11-22",
-      "time": "15:00",
-      "round": 8,
-      "home": "Klub R Podchod Brno",
-      "away": "Double Trouble Brno B",
-      "venue": "Podchod klub, Brno"
-    },
-    {
-      "day": "Ne",
-      "date": "2026-11-22",
-      "time": "15:00",
-      "round": 8,
-      "home": "DC Womitz killers Omice",
-      "away": "Šipkaři Budišov",
-      "venue": "Womická hospůdka, Omice"
-    },
-    {
-      "day": "Ne",
-      "date": "2026-11-22",
-      "time": "15:00",
-      "round": 8,
-      "home": "Bastr team Brno",
-      "away": "Zálesáci",
-      "venue": "Pivnice \"U Sama\", Brno"
-    },
-    {
-      "day": "Ne",
-      "date": "2026-11-22",
-      "time": "15:00",
-      "round": 8,
-      "home": "DC Zmije Třebíč",
-      "away": "Kouzelníci z Yellow Fish",
-      "venue": "Synottip Bar Třebíč, Třebíč"
-    },
-    {
-      "day": "Ne",
       "date": "2026-11-29",
       "time": "15:00",
       "round": 9,
@@ -265,6 +220,52 @@
       "home": "Zálesáci",
       "away": "Double Trouble Brno",
       "venue": "Pohostinství u Lesíka, Třebíč"
+    },
+    {
+      "day": "Ne",
+      "date": "2026-12-06",
+      "time": "15:00",
+      "round": 10,
+      "home": "Double Trouble Brno",
+      "away": "Kouzelníci z Yellow Fish",
+      "venue": "Bohunická šipka, Brno"
+    },
+    {
+      "day": "Ne",
+      "date": "2026-12-06",
+      "time": "15:00",
+      "round": 10,
+      "home": "Klub R Podchod Brno",
+      "away": "Zálesáci",
+      "venue": "Podchod klub, Brno"
+    },
+    {
+      "day": "Ne",
+      "date": "2026-12-06",
+      "time": "15:00",
+      "round": 10,
+      "home": "DC Womitz killers Omice",
+      "away": "Podchod klub Brno",
+      "venue": "Womická hospůdka, Omice"
+    },
+    {
+      "day": "Ne",
+      "date": "2026-12-06",
+      "time": "15:00",
+      "round": 10,
+      "home": "Strmeň Kohoutovice",
+      "away": "Šipkaři Budišov",
+      "venue": "Rest.Fotbalové hřiště, Brno"
+    },
+    {
+      "day": "Ne",
+      "date": "2026-12-06",
+      "time": "15:00",
+      "round": 10,
+      "home": "DC Zmije Třebíč",
+      "away": "Bastr team Brno",
+      "venue": "Synottip Bar Třebíč, Třebíč"
     }
-  ]
+  ],
+  "fixturesStatus": "ok"
 }
