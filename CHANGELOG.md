@@ -3,6 +3,12 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.15.1 (23. 11. 2026)
+
+- Oprava stahování ligy: když stránka ligy obsahuje i jinou tabulku se sloupci Domácí a Hosté (třeba výsledky), skript už kvůli tomu nepadá a vezme správný rozpis. Tabulka družstev se aktualizuje vždy.
+- Když se rozpis utkání nepodaří přečíst, ponechá se poslední známý a v Lize se to napíše.
+- V Lize se ukazují jen utkání od dneška dál.
+
 ## Verze 0.15 (22. 11. 2026)
 
 - Výhra, prohra nebo remíza kola je vidět na kartě kola i v jeho detailu: u výhry zlatý 🏆 Výhra, zlaté skóre a nápis Vyhráli jsme.

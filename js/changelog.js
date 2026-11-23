@@ -1,7 +1,16 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.15";
+export const VERSION = "0.15.1";
 
 export const CHANGELOG = [
+  {
+    version: "0.15.1",
+    date: "23. 11. 2026",
+    changes: [
+      "Oprava stahování ligy: když stránka ligy obsahuje i jinou tabulku se sloupci Domácí a Hosté (třeba výsledky), skript už kvůli tomu nepadá a vezme správný rozpis. Tabulka družstev se aktualizuje vždy.",
+      "Když se rozpis utkání nepodaří přečíst, ponechá se poslední známý a v Lize se to napíše.",
+      "V Lize se ukazují jen utkání od dneška dál."
+    ]
+  },
   {
     version: "0.15",
     date: "22. 11. 2026",

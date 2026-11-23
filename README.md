@@ -86,3 +86,21 @@ Tabulka a rozpis ligy se berou z veřejných stránek Unie šipkových organizac
   změněná struktura stránky, nebo odmítnutí webem ligy).
 - GitHub u veřejných repozitářů po 60 dnech bez aktivity naplánované úlohy vypne. Stačí je znovu
   zapnout v záložce Actions.
+
+### Přesné spouštění přes cron-job.org (volitelné)
+
+Naplánované úlohy na GitHubu se někdy opozdí, protože GitHub je spouští podle vytížení svých serverů.
+Chceš-li přesné časy, nech úlohu spouštět cron-job.org a GitHub ať zůstane jen jako záloha.
+
+1. Na GitHubu: **Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token**.
+   Repozitář vyber jen tenhle (**Only select repositories**), v oprávnění repozitáře dej **Actions: Read and write**
+   a ostatní nech bez přístupu. Token si zkopíruj a nikomu ho neposílej.
+2. V cron-job.org založ nový cronjob:
+   - URL: `https://api.github.com/repos/TVOJEJMENO/NAZEV-REPOZITARE/actions/workflows/liga.yml/dispatches`
+   - Metoda **POST**, tělo `{"ref":"main"}`
+   - Hlavičky: `Authorization: Bearer TVŮJ_TOKEN`, `Accept: application/vnd.github+json`,
+     `X-GitHub-Api-Version: 2022-11-28`, `Content-Type: application/json`
+   - Časování třeba 4:05, 10:05, 16:05 a 22:05 (časové pásmo Europe/Prague)
+3. Správná odpověď je **HTTP 204**. Běh se pak objeví v záložce Actions.
+4. V souboru `.github/workflows/liga.yml` můžeš naplánovanou úlohu zřídkavit na jednou denně
+   (řádek `cron:`), aby sloužila jen jako záloha.

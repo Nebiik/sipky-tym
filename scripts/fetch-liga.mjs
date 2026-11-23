@@ -75,30 +75,39 @@ const toIsoDate = (d) => {
   return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : null;
 };
 
+// Názvy sloupce s místem hraní, které akceptujeme.
+const VENUE_HEADS = ["hraci misto", "misto", "hriste", "misto konani"];
+
+// Rozpis je doplněk, tabulka družstev je hlavní. Proto tahle funkce nikdy nepadá, jen vrátí stav:
+//  ok = rozpis přečten, empty = na stránce žádná taková tabulka není (třeba konec sezóny),
+//  unreadable = tabulky s Domácí a Hosté jsou, ale žádná nevypadá jako rozpis (třeba jen výsledky).
 export function parseFixtures($) {
-  const table = leafTables($).find((t) => {
-    const head = rowsOf($, t)[0]?.map(norm) || [];
-    return head.includes("domaci") && head.includes("hoste") && head.includes("datum");
-  });
-  if (!table) return []; // na konci sezóny rozpis nemusí být
-  const rows = rowsOf($, table);
-  const head = rows[0].map(norm);
-  const idx = (name) => head.indexOf(name);
-  const need = ["den", "datum", "cas", "kolo", "domaci", "hoste", "hraci misto"].map((n) => [n, idx(n)]);
-  const missing = need.filter(([, i]) => i < 0).map(([n]) => n);
-  if (missing.length) fail(`V rozpisu chybí sloupce: ${missing.join(", ")}.`);
-  const col = Object.fromEntries(need);
+  const cands = leafTables($)
+    .map((t) => ({ t, head: (rowsOf($, t)[0] || []).map(norm) }))
+    .filter((c) => c.head.includes("domaci") && c.head.includes("hoste") && c.head.includes("datum"));
+  if (!cands.length) return { fixtures: [], status: "empty", headers: [] };
+  const headers = cands.map((c) => c.head.join(" | "));
+  // rozpis má den, datum, čas, kolo a místo. Tabulka výsledků má místo skóre a místo nemá.
+  const usable = cands.find((c) =>
+    ["den", "datum", "cas", "kolo", "domaci", "hoste"].every((k) => c.head.includes(k))
+    && VENUE_HEADS.some((v) => c.head.includes(v))
+    && !c.head.some((h) => h.includes("skore") || h.includes("vysledek")));
+  if (!usable) return { fixtures: [], status: "unreadable", headers };
+  const rows = rowsOf($, usable.t);
+  const head = usable.head;
+  const col = (name) => head.indexOf(name);
+  const venue = col(VENUE_HEADS.find((v) => head.includes(v)));
   const out = [];
   for (const cells of rows.slice(1)) {
     if (cells.length < head.length - 1) continue;
-    const date = toIsoDate(cells[col.datum]);
+    const date = toIsoDate(cells[col("datum")]);
     if (!date) continue;
     out.push({
-      day: cells[col.den], date, time: cells[col.cas], round: Number.parseInt(cells[col.kolo], 10) || null,
-      home: cells[col.domaci], away: cells[col.hoste], venue: cells[col["hraci misto"]]
+      day: cells[col("den")], date, time: cells[col("cas")], round: Number.parseInt(cells[col("kolo")], 10) || null,
+      home: cells[col("domaci")], away: cells[col("hoste")], venue: cells[venue]
     });
   }
-  return out;
+  return { fixtures: out, status: out.length ? "ok" : "empty", headers };
 }
 
 export function parseMeta($) {
@@ -165,8 +174,18 @@ export async function run({
   await sleep(pauseMs);
   const $g = cheerio.load(await get(groupUrl, { ua }));
   const standings = parseStandings($g);
-  const fixtures = parseFixtures($g);
+  const fx = parseFixtures($g);
   const meta = parseMeta($g);
+
+  let prev = null;
+  try { prev = JSON.parse(fs.readFileSync(out, "utf8")); } catch { /* první spuštění */ }
+
+  let fixtures = fx.fixtures;
+  if (fx.status === "unreadable") {
+    // tabulka je aktuální, jen rozpis jsme nepřečetli: ponecháme poslední známý a do logu napíšeme, co jsme viděli
+    log(`Pozor: rozpis utkání jsem na stránce nenašel v očekávaném tvaru, ponechávám poslední známý. Tabulky s Domácí a Hosté mají hlavičky: ${fx.headers.join(" ;; ")}`);
+    fixtures = prev?.fixtures || [];
+  }
 
   if (!standings.some((s) => norm(s.team) === norm(config.team))) {
     log(`Pozor: tým "${config.team}" není v tabulce. Zkontroluj název v scripts/liga.config.json.`);
@@ -181,11 +200,10 @@ export async function run({
     season: meta.season,
     team: config.team,
     standings,
-    fixtures
+    fixtures,
+    fixturesStatus: fx.status
   };
 
-  let prev = null;
-  try { prev = JSON.parse(fs.readFileSync(out, "utf8")); } catch { /* první spuštění */ }
   const core = (o) => JSON.stringify({ ...o, checkedAt: undefined, sourceSync: undefined });
   const changed = !prev || core(prev) !== core(data);
   const stale = !prev?.checkedAt || now - new Date(prev.checkedAt) > REFRESH_HOURS * 3600 * 1000;

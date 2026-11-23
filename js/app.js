@@ -1119,7 +1119,12 @@ function viewLiga() {
   const d = L.data;
   const us = d.standings.find((s) => normTeam(s.team) === normTeam(d.team));
   const all = state.ligaAll;
-  const idxs = (d.fixtures || []).map((f, i) => i);
+  // odehraná utkání se neukazují, ani kdyby rozpis zrovna zastaral
+  const today = startOfToday();
+  const idxs = (d.fixtures || []).map((f, i) => i).filter((i) => {
+    const day = new Date(`${d.fixtures[i].date}T12:00:00`);
+    return isNaN(day) || day >= today;
+  });
   const isOurs = (f) => [normTeam(f.home), normTeam(f.away)].includes(normTeam(d.team));
   const oursIdx = idxs.filter((i) => isOurs(d.fixtures[i]));
   const otherIdx = idxs.filter((i) => !isOurs(d.fixtures[i]));
@@ -1146,9 +1151,12 @@ function viewLiga() {
     <p><button class="link" data-action="liga-cols">${all ? "Méně sloupců" : "Všechny sloupce"}</button></p>`;
 
   html += `<h2>Naše další utkání</h2>`;
+  if (d.fixturesStatus === "unreadable") {
+    html += `<p class="muted">Rozpis utkání se z webu ligy teď nepodařilo přečíst${oursIdx.length ? ", ukazuju poslední známý" : ""}. Tabulka je aktuální.</p>`;
+  }
   html += oursIdx.length
     ? `<div class="fxlist">${oursIdx.map((i) => fixtureRow(d.fixtures[i], i, d, true)).join("")}</div>`
-    : `<p class="muted">V rozpisu teď žádné naše utkání není.</p>`;
+    : d.fixturesStatus === "unreadable" ? "" : `<p class="muted">V rozpisu teď žádné naše utkání není.</p>`;
 
   if (otherIdx.length) {
     html += `<details class="otherfx"><summary>Ostatní utkání v lize (${otherIdx.length})</summary>
