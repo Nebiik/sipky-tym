@@ -779,6 +779,7 @@ function viewTournament(t) {
 /* ----- zápasy: ligová kola ----- */
 
 const SLOT_COUNT = 18;
+const LEGS_TO_WIN = 2; // v lize se vždy hraje na dva vítězné legy
 const slotKind = (n) => (n === 9 ? "team501" : n === 10 ? "cricket" : "single");
 const KIND_LABEL = { team501: "Týmovka 501", cricket: "Kriket" };
 const curRound = () => state.rounds.find((x) => x.id === state.rid);
@@ -1084,9 +1085,16 @@ function fixtureRow(f, i, d, ours) {
   if (ours) {
     const opp = homeUs ? f.away : f.home;
     const existing = state.rounds.find((r) => !isNaN(fdate) && sameDay(r.date.toDate(), fdate) && normTeam(r.opponent) === normTeam(opp));
-    action = existing
+    // událost Zápas ve stejný den (zakládat je z rozpisu smí jen správce)
+    const event = state.events.find((e) => e.type === "match" && !isNaN(fdate) && sameDay(e.startsAt.toDate(), fdate));
+    const eventBtn = state.me.role !== "admin" ? ""
+      : event
+        ? `<button class="btn" data-action="liga-edit-event" data-id="${event.id}">Upravit událost</button>`
+        : `<button class="btn" data-action="liga-new-event" data-i="${i}">Založit událost</button>`;
+    const roundBtn = existing
       ? `<button class="btn" data-action="round-open" data-id="${existing.id}">Otevřít kolo</button>`
       : `<button class="btn primary" data-action="liga-new-round" data-i="${i}">Založit kolo</button>`;
+    action = eventBtn + roundBtn;
   }
   return `
     <div class="fxrow ${ours ? "ours" : ""}">
@@ -1456,10 +1464,11 @@ function updateLineupCounts(form) {
   if (sc) sc.textContent = m ? `(${m})` : "";
 }
 
-function openEventDialog(id) {
+function openEventDialog(id, preset) {
   const ev = id ? state.events.find((e) => e.id === id) : null;
-  const d = ev ? ev.startsAt.toDate() : defaultStart();
-  const curType = ev?.type || "training";
+  const d = ev ? ev.startsAt.toDate() : preset?.date || defaultStart();
+  const curType = ev?.type || preset?.type || "training";
+  const isHome = ev ? !!ev.home : !!preset?.home;
   const members = [...state.users.values()].filter((u) => isMemberRole(u.role)).sort(byName);
   const counts = cateringCounts(id);
   const chips = (name, set, extra) => members.map((u) => `
@@ -1475,11 +1484,11 @@ function openEventDialog(id) {
         ${Object.entries(TYPES).map(([k, t]) => `
           <label class="chip"><input type="radio" name="type" value="${k}" ${k === curType ? "checked" : ""}><span>${t.icon} ${t.label}</span></label>`).join("")}
       </fieldset>
-      <label>Název<input name="title" maxlength="80" placeholder="Např. Trénink na automatu" value="${esc(ev?.title || "")}"></label>
+      <label>Název<input name="title" maxlength="80" placeholder="Např. Trénink na automatu" value="${esc(ev ? ev.title || "" : preset?.title || "")}"></label>
       <label>Kdy<input type="datetime-local" name="when" required value="${toLocalInput(d)}"></label>
-      <label>Kde<input name="location" maxlength="120" placeholder="Např. Podchod klub, Brno" value="${esc(ev?.location || "")}"></label>
+      <label>Kde<input name="location" maxlength="120" placeholder="Např. Podchod klub, Brno" value="${esc(ev ? ev.location || "" : preset?.location || "")}"></label>
       <div id="matchFields" class="matchfields" ${curType === "match" ? "" : "hidden"}>
-        <label class="check"><input type="checkbox" name="home" ${ev?.home ? "checked" : ""}><span>Domácí zápas</span></label>
+        <label class="check"><input type="checkbox" name="home" ${isHome ? "checked" : ""}><span>Domácí zápas</span></label>
         <fieldset class="players">
           <legend>Základní sestava <span id="lcount" class="muted"></span></legend>
           <div class="chips">${chips("lineup", lineupSel)}</div>
@@ -1488,13 +1497,13 @@ function openEventDialog(id) {
           <legend>Náhradníci <span id="scount" class="muted"></span></legend>
           <div class="chips">${chips("subs", subsSel)}</div>
         </fieldset>
-        <fieldset class="players" id="cateringBox" ${ev?.home ? "" : "hidden"}>
+        <fieldset class="players" id="cateringBox" ${isHome ? "" : "hidden"}>
           <legend>Kdo dělá občerstvení</legend>
           <div class="chips">${chips("catering", cateringSel, (u) => (counts.get(u.id) ? ` <small class="muted">${counts.get(u.id)}×</small>` : ""))}</div>
           <p class="muted hint">Číslo ukazuje, kolikrát už je u domácích zápasů zapsaný na občerstvení.</p>
         </fieldset>
       </div>
-      <label>Poznámka<textarea name="notes" rows="3" maxlength="500" placeholder="Co přinést, na co myslet…">${esc(ev?.notes || "")}</textarea></label>
+      <label>Poznámka<textarea name="notes" rows="3" maxlength="500" placeholder="Co přinést, na co myslet…">${esc(ev ? ev.notes || "" : preset?.notes || "")}</textarea></label>
       <div class="actions">
         ${ev ? `<button type="button" class="btn danger" data-dlg="delete" data-id="${ev.id}">Smazat událost</button>` : ""}
         <span class="spacer"></span>
@@ -1661,7 +1670,6 @@ function openMatchStartDialog(slot) {
   if (!our.length) { toast("Nejdřív v kole (Upravit) vyber naše hráče."); return; }
   const singles = [...state.matches.values()].filter((x) => x.kind === "single");
   const cnt = (key, id) => singles.filter((x) => x[key] === id).length;
-  const lastNeed = singles.sort((a, b) => b.slot - a.slot)[0]?.legsToWin || 1;
   const chip = (name, id, value, key) => {
     const c = cnt(key, id);
     return `<label class="chip"><input type="radio" name="${name}" value="${esc(id)}"><span>${esc(value)}${c ? ` <small class="muted">${c}×</small>` : ""}</span></label>`;
@@ -1674,9 +1682,6 @@ function openMatchStartDialog(slot) {
       </fieldset>
       <fieldset class="types"><legend>Soupeř</legend>
         ${opp.map((p) => chip("opp", p.id, p.name, "oppId")).join("")}
-      </fieldset>
-      <fieldset class="types"><legend>Hraje se na vítězné legy</legend>
-        ${[1, 2, 3].map((n) => `<label class="chip"><input type="radio" name="legs" value="${n}" ${n === lastNeed ? "checked" : ""}><span>${n}</span></label>`).join("")}
       </fieldset>
       <div class="actions">
         <span class="spacer"></span>
@@ -1989,6 +1994,25 @@ document.addEventListener("click", async (e) => {
       case "stats-reload": stopAllMatches(); render(); break;
       case "liga-reload": state.liga = { status: "idle", data: null, error: "" }; render(); break;
       case "liga-cols": state.ligaAll = !state.ligaAll; render(); break;
+      case "liga-new-event": {
+        if (state.me.role !== "admin") break;
+        const d = state.liga.data;
+        const f = d?.fixtures?.[Number(t.dataset.i)];
+        if (!f) break;
+        const homeUs = normTeam(f.home) === normTeam(d.team);
+        const time = /^\d{1,2}:\d{2}$/.test(f.time || "") ? f.time.padStart(5, "0") : "15:00";
+        const when = new Date(`${f.date}T${time}:00`);
+        openEventDialog(null, {
+          type: "match",
+          title: `Zápas s ${homeUs ? f.away : f.home}`,
+          date: isNaN(when) ? undefined : when,
+          location: f.venue || "",
+          notes: [f.round ? `${f.round}. kolo` : "", d.group || ""].filter(Boolean).join(", "),
+          home: homeUs
+        });
+        break;
+      }
+      case "liga-edit-event": if (state.me.role === "admin") openEventDialog(id); break;
       case "liga-new-round": {
         const d = state.liga.data;
         const f = d?.fixtures?.[Number(t.dataset.i)];
@@ -2282,7 +2306,7 @@ document.addEventListener("submit", async (e) => {
       if (!our || !opp) { toast("Vyber našeho hráče i soupeře."); return; }
       const data = {
         slot, kind: "single", ourId: our.id, ourName: our.name, oppId: opp.id, oppName: opp.name,
-        legsToWin: Number(fd.get("legs")) || 1, legs: [], status: "playing", result: { our: 0, opp: 0 },
+        legsToWin: LEGS_TO_WIN, legs: [], status: "playing", result: { our: 0, opp: 0 },
         createdBy: state.user.uid
       };
       const id = `m${slot}`;

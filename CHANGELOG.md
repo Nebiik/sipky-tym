@@ -3,6 +3,13 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.17 (23. 11. 2026)
+
+- V Lize je u našeho utkání (jen pro správce) tlačítko Založit událost. Otevře formulář předvyplněný z rozpisu: Zápas, název Zápas s (soupeř), datum a čas, místo, číslo kola a skupina v poznámce.
+- Domácí zápas se zaškrtne jen tehdy, když je náš tým v rozpisu uveden jako domácí. Když hraje doma A tým a my jsme v rozpisu hosté, zůstane zápas jako venkovní, i když se hraje ve stejné hospodě.
+- Když už událost Zápas ve stejný den existuje, nabídne se místo toho Upravit událost, takže se zápas nezaloží dvakrát.
+- Při zakládání zápasu v kole zmizela volba, na kolik vítězných legů se hraje. V lize se vždy hraje na dva vítězné legy.
+
 ## Verze 0.16 (23. 11. 2026)
 
 - Náš hráč se při zápisu zadává stejně jako soupeř: napíšeš, kolik mu po kole zbývá. Body za kolo, průměr a křížky se dopočítají. Šipky se už nezadávají.

@@ -543,8 +543,8 @@ body.scoring #toast { bottom: auto; top: calc(.8rem + env(safe-area-inset-top));
 .fxmatch { display: grid; gap: .1rem; overflow-wrap: anywhere; }
 .fxmatch .us { font-weight: 800; color: var(--brass); }
 .fxmatch small { display: block; }
-.fxact { grid-column: 1 / -1; }
-.fxact .btn { width: 100%; }
+.fxact { grid-column: 1 / -1; display: flex; gap: .5rem; }
+.fxact .btn { flex: 1; min-width: 0; padding-inline: .6rem; }
 .otherfx { margin-top: 1.2rem; }
 .otherfx summary { cursor: pointer; padding: .5rem 0; color: var(--dim); }
 .otherfx .fxlist { margin-top: .5rem; }
