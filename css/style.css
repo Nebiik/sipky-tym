@@ -647,3 +647,6 @@ h2.first { margin-top: 0; }
 .cm-actions .link.danger { color: var(--red-text); }
 .visits th.h-our { color: var(--green-text); }
 .visits th.h-opp { color: var(--red-text); }
+.tile.wide { grid-column: 1 / -1; }
+.tile .leader { margin-top: .35rem; font-size: .92rem; overflow-wrap: anywhere; }
+.tile .leader b { color: var(--brass); }

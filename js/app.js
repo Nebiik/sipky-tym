@@ -1072,8 +1072,19 @@ const STAT_SORTS = {
   beton: ["Betony", (a, b) => b.beton - a.beton]
 };
 
+// Kdo je nejlepší: vrací { value, players } pro nejvyšší kladnou hodnotu (při shodě všichni), jinak null.
+function bestOf(list, valueOf) {
+  const rows = list.map((p) => ({ p, v: valueOf(p) })).filter((x) => Number.isFinite(x.v));
+  if (!rows.length) return null;
+  const top = Math.max(...rows.map((x) => x.v));
+  if (!(top > 0)) return null;
+  return { value: top, players: rows.filter((x) => x.v === top).map((x) => x.p) };
+}
+const kolWord = (n) => (n === 1 ? "kolo" : n >= 2 && n <= 4 ? "kola" : "kol");
+
 function viewSeasonStats() {
   const head = segControl();
+  if (state.liga.status === "idle") setTimeout(loadLiga, 0); // skóre kol a zápasů se bere z tabulky ligy
   if (state.allMatchesStatus === "idle") {
     setTimeout(startAllMatches, 0);
     return `${head}<p class="muted">Načítám statistiky…</p>`;
@@ -1100,15 +1111,37 @@ function viewSeasonStats() {
     return html + `<div class="empty"><p><strong>Zatím není z čeho počítat.</strong></p><p>Statistiky se naplní, jakmile se zapíše první zápas v nějakém kole.</p></div>`;
   }
 
-  const tile = (label, value, note) => `<div class="tile"><span class="tl">${label}</span><strong>${value}</strong>${note ? `<small class="muted">${note}</small>` : ""}</div>`;
-  html += `<div class="tiles">
-    ${tile("Kola", `${rw}–${rd}–${rl}`, "výhry, remízy, prohry")}
-    ${tile("Zápasy", `${t.won}:${t.lost}`, `jednotlivci, legy ${t.legsW}:${t.legsL}`)}
-    ${tile("Průměr týmu", fmtAvg(t.avg), "ze všech zápasů")}
-    ${tile("Naše křížky", `${t.c95} / ${t.c133} / ${t.c170}`, "95+ / 133+ / 170+")}
-    ${tile("Křížky soupeřů", `${t.opp.c95} / ${t.opp.c133} / ${t.opp.c170}`, "95+ / 133+ / 170+")}
-    ${tile("Betony", t.beton, `pokuty ${t.fine} Kč`)}
-  </div>`;
+  const tile = (label, value, note, extra = "") => `<div class="tile"><span class="tl">${label}</span><strong>${value}</strong>${note ? `<small class="muted">${note}</small>` : ""}${extra}</div>`;
+  const leader = (lead, text) => {
+    const names = lead.players.map(nameOf);
+    // když se o první místo dělí víc než tři hráči, jména nic neříkají
+    return `<span class="leader">🥇 ${names.length > 3 ? `${names.length} hráčů shodně` : esc(joinNames(names))} <b>${text}</b></span>`;
+  };
+
+  // skóre kol a zápasů za celou sezónu je z tabulky ligy (zápasy před zavedením aplikace v ní nejsou)
+  const L = state.liga;
+  const us = L.status === "ok" ? L.data.standings.find((r) => normTeam(r.team) === normTeam(L.data.team)) : null;
+
+  // nejlepší průměr se vybírá z hráčů s aspoň dvěma zápasy, dokud takový někdo je
+  const qualified = players.filter((p) => p.matches >= 2);
+  const avgLead = bestOf(qualified.length ? qualified : players, (p) => Math.round(p.avg * 10) / 10);
+  const crossLead = bestOf(players, (p) => p.c95 + p.c133 + p.c170);
+
+  const tiles = [];
+  if (us) {
+    tiles.push(tile("Kola v lize", `${us.v + us.vp}–${us.r}–${us.pp + us.p + us.k}`, `výhry, remízy, prohry po ${us.played} ${us.played === 1 ? "kole" : "kolech"}`));
+    tiles.push(tile("Zápasy v lize", `${us.scoreFor}:${us.scoreAgainst}`, `legy ${us.legsFor}:${us.legsAgainst}`));
+  }
+  tiles.push(tile("Průměr týmu", fmtAvg(t.avg), "ze zapsaných zápasů", avgLead ? leader(avgLead, fmtAvg(avgLead.value)) : ""));
+  tiles.push(tile("Naše křížky", `${t.c95} / ${t.c133} / ${t.c170}`, "95+ / 133+ / 170+", crossLead ? leader(crossLead, `${crossLead.value}×`) : ""));
+  tiles.push(tile("Betony", t.beton, `pokuty ${t.fine} Kč`));
+  if (tiles.length % 2) tiles[tiles.length - 1] = tiles[tiles.length - 1].replace('class="tile"', 'class="tile wide"');
+  html += `<div class="tiles">${tiles.join("")}</div>`;
+
+  const recorded = new Set(all.filter((m) => (m.legs || []).length).map((m) => m.roundId)).size;
+  html += `<p class="muted legend">${us ? "Kola a zápasy v lize jsou z tabulky ligy za celou sezónu." : "Kola a zápasy v lize tu nejsou, protože se tabulka ligy teď nenačetla."}
+    Průměr, křížky a betony jsou jen ze zápasů zapsaných v aplikaci (zatím ${recorded} ${kolWord(recorded)}).
+    Nejlepší průměr se vybírá z hráčů s aspoň dvěma zapsanými zápasy.</p>`;
 
   html += `<h2>Naši hráči</h2>
     <label class="sortpick">Řadit podle

@@ -1,7 +1,17 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.19";
+export const VERSION = "0.20";
 
 export const CHANGELOG = [
+  {
+    version: "0.20",
+    date: "24. 11. 2026",
+    changes: [
+      "Statistiky zápasů: dlaždice Kola a Zápasy teď berou skutečnou bilanci za celou sezónu z tabulky ligy (Kola v lize a Zápasy v lize), takže počítají i kola odehraná před zavedením aplikace.",
+      "Dlaždice Průměr týmu ukazuje, kdo má nejlepší průměr (🥇), a dlaždice Naše křížky, kdo jich má nejvíc. Nejlepší průměr se vybírá z hráčů s aspoň dvěma zapsanými zápasy. Při shodě se vypíšou všichni, u víc než tří jen jejich počet.",
+      "Dlaždice Křížky soupeřů je pryč. Betony zůstaly.",
+      "Pod dlaždicemi je vysvětleno, odkud čísla jsou: kola a zápasy z ligy, průměr, křížky a betony ze zápasů zapsaných v aplikaci."
+    ]
+  },
   {
     version: "0.19",
     date: "23. 11. 2026",

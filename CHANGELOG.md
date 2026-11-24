@@ -3,6 +3,13 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.20 (24. 11. 2026)
+
+- Statistiky zápasů: dlaždice Kola a Zápasy teď berou skutečnou bilanci za celou sezónu z tabulky ligy (Kola v lize a Zápasy v lize), takže počítají i kola odehraná před zavedením aplikace.
+- Dlaždice Průměr týmu ukazuje, kdo má nejlepší průměr (🥇), a dlaždice Naše křížky, kdo jich má nejvíc. Nejlepší průměr se vybírá z hráčů s aspoň dvěma zapsanými zápasy. Při shodě se vypíšou všichni, u víc než tří jen jejich počet.
+- Dlaždice Křížky soupeřů je pryč. Betony zůstaly.
+- Pod dlaždicemi je vysvětleno, odkud čísla jsou: kola a zápasy z ligy, průměr, křížky a betony ze zápasů zapsaných v aplikaci.
+
 ## Verze 0.19 (23. 11. 2026)
 
 - Při zápisu zápasu je vlevo ten, kdo začíná leg, stejně jako budík na automatu. V dalším legu se strany obrátí. Mezi legy je vlevo ten, kdo má podle střídání začínat.
