@@ -1,7 +1,14 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.21";
+export const VERSION = "0.21.1";
 
 export const CHANGELOG = [
+  {
+    version: "0.21.1",
+    date: "24. 11. 2026",
+    changes: [
+      "Při nahrávání starších zápasů a v Přiřadit hráče jde u hráče zvolit Vynechat (už není v týmu). Takový hráč se z importu odstraní a zmizí ze statistik i ze součtů týmu. Výsledky starších kol zůstávají."
+    ]
+  },
   {
     version: "0.21",
     date: "24. 11. 2026",

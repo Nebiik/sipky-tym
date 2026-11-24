@@ -3,6 +3,10 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.21.1 (24. 11. 2026)
+
+- Při nahrávání starších zápasů a v Přiřadit hráče jde u hráče zvolit Vynechat (už není v týmu). Takový hráč se z importu odstraní a zmizí ze statistik i ze součtů týmu. Výsledky starších kol zůstávají.
+
 ## Verze 0.21 (24. 11. 2026)
 
 - Starší zápasy z doby před aplikací (z Pechtiku) jdou nahrát ze souboru a přidají se do statistik: zápasy, legy, průměr, křížky a betony hráčů i seznam starších kol. Nahrávat a přiřazovat hráče smí jen správce, čísla vidí všichni členové.

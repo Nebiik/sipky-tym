@@ -1237,12 +1237,13 @@ function renderBaselineMapping(edit) {
   $dlg.innerHTML = `
     <form id="baselineForm" class="stack" data-step="map" data-edit="${edit ? "1" : ""}">
       <h2>Přiřaď hráče</h2>
-      <p class="muted">${d.rounds.length} ${kolWord(d.rounds.length)} a ${d.players.length} hráčů. Ke každému hráči vyber člena týmu, nebo nech Bez účtu (zůstane ve statistikách pod svým jménem). Vybraná čísla se přičtou k jeho zápasům v aplikaci.</p>
+      <p class="muted">${d.rounds.length} ${kolWord(d.rounds.length)} a ${d.players.length} hráčů. Ke každému hráči vyber člena týmu, nebo nech Bez účtu (zůstane ve statistikách pod svým jménem). Kdo už v týmu není, tomu dej Vynechat, ten se z importu odstraní a ze statistik zmizí. Vybraná čísla se přičtou k jeho zápasům v aplikaci.</p>
       <div class="map-list">${d.players.map((p, i) => `
         <div class="maprow">
           <div><strong>${esc(p.key)}</strong><small class="muted">zápasy ${p.won}:${p.lost}, legy ${p.legsW}:${p.legsL}, Ø ${fmtAvg(p.avg)}${p.avgApprox ? " (odhad)" : ""}, křížky ${p.c95}/${p.c133}/${p.c170}, betony ${p.beton}</small></div>
           <select name="map-${i}" aria-label="Člen týmu pro ${esc(p.key)}">
             <option value="">Bez účtu</option>
+            <option value="__skip">Vynechat (už není v týmu)</option>
             ${members.map((u) => `<option value="${esc(u.id)}" ${preselect(p) === u.id ? "selected" : ""}>${esc(u.displayName)}</option>`).join("")}
           </select>
         </div>`).join("")}
@@ -2460,10 +2461,15 @@ document.addEventListener("submit", async (e) => {
         return;
       }
       const d = state.baselineDraft;
-      const players = d.players.map((p, i) => ({ ...p, uid: fd.get(`map-${i}`) || null }));
+      // kdo je nastavený na Vynechat, do uloženého importu nepatří
+      const players = d.players
+        .map((p, i) => ({ p, v: fd.get(`map-${i}`) || "" }))
+        .filter((x) => x.v !== "__skip")
+        .map((x) => ({ ...x.p, uid: x.v || null }));
+      const skipped = d.players.length - players.length;
       if (f.dataset.edit) {
         await updateDoc(doc(db, "baseline", "pechtik"), { players });
-        toast("Přiřazení je uložené.");
+        toast(skipped ? `Přiřazení je uložené, vynecháno hráčů: ${skipped}.` : "Přiřazení je uložené.");
       } else {
         await setDoc(doc(db, "baseline", "pechtik"), { source: d.source, importedAt: serverTimestamp(), rounds: d.rounds, players });
         toast("Starší zápasy jsou nahrané.");
