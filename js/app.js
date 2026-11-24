@@ -60,6 +60,7 @@ const state = {
   padBeton: 0,         // počet betonů vybraný pro kolo našeho hráče
   padUsed: 3,          // šipek na zavření (jen náš hráč)
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
+  flash: null,         // krátká oslava výhry legu nebo zápasu
   baseline: null,      // starší zápasy z doby před aplikací (souhrn za hráče a kola)
   baselineDraft: null, // rozpracovaný import ve správcovském dialogu
   comments: [],        // komentáře ke všem událostem {id, eventId, uid, text, createdAt, editedAt}
@@ -327,6 +328,7 @@ function stopData() {
   state.rsvps = new Map();
   state.tournaments = [];
   state.comments = [];
+  state.flash = null;
   state.baseline = null;
   state.tid = null;
   state.rounds = [];
@@ -370,6 +372,9 @@ const logo = (cls = "", size = 36) =>
   `<img class="logo ${cls}" src="icons/icon.svg" alt="" width="${size}" height="${size}">`;
 
 let raf = 0;
+let lastViewKey = null;
+let flashTimer = null;
+
 function render() {
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(draw);
@@ -389,7 +394,12 @@ function draw() {
     ? (state.view === "team" ? viewTeam() : state.view === "tournaments" ? viewTournaments() : state.view === "matches" ? viewMatches() : viewEvents())
     : `<p class="muted">Načítám…</p>`;
   document.body.classList.toggle("scoring", ok && state.view === "matches" && isLiveScoring());
+  // při změně obrazovky se obsah krátce vsune, při obnovení dat ne
+  const viewKey = [state.view, state.mview, state.tview, state.rid, state.tid, state.mslot].join("|");
+  $app.dataset.enter = viewKey !== lastViewKey ? "1" : "";
+  lastViewKey = viewKey;
   $app.innerHTML = shell(body);
+  if (state.flash && ok && isLiveScoring()) $app.insertAdjacentHTML("beforeend", flashHtml());
   window.scrollTo(0, y);
 }
 
@@ -532,6 +542,27 @@ function lineupBlock(ev, votes) {
   return `<div class="lineup">${html}</div>`;
 }
 
+/* ----- vzhled (tmavý, světlý, podle telefonu) ----- */
+
+const THEMES = [["dark", "Tmavý"], ["light", "Světlý"], ["auto", "Podle telefonu"]];
+const themePref = () => {
+  try { const v = localStorage.getItem("theme"); return THEMES.some(([k]) => k === v) ? v : "dark"; } catch { return "dark"; }
+};
+function applyTheme() {
+  const pref = themePref();
+  const light = pref === "light" || (pref === "auto" && window.matchMedia?.("(prefers-color-scheme: light)").matches);
+  document.documentElement.dataset.theme = light ? "light" : "dark";
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#f5efdc" : "#101714");
+  document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", light ? "light" : "dark");
+}
+function setTheme(v) {
+  try { localStorage.setItem("theme", v); } catch { /* bez uložení platí jen do zavření */ }
+  applyTheme();
+  render();
+}
+applyTheme();
+window.matchMedia?.("(prefers-color-scheme: light)").addEventListener?.("change", () => { if (themePref() === "auto") applyTheme(); });
+
 /* ----- komentáře k události ----- */
 
 const COMMENT_MAX = 300;
@@ -654,7 +685,14 @@ function eventCard(ev, hero = false) {
       <i class="y" style="flex-grow:${yes.length}"></i><i class="n" style="flex-grow:${no.length}"></i>
     </div>`;
 
+  const strip = `
+    <div class="votestrip" role="img" aria-label="Můžou ${yes.length}, nemůžou ${no.length}, nehlasovali ${none.length}">
+      ${[...yes.map((u) => [u, "yes", "Můžu"]), ...no.map((u) => [u, "no", "Nemůžu"]), ...none.map((u) => [u, "none", "Nehlasoval"])]
+        .map(([u, st, lb]) => `<span class="vs ${st}" title="${esc(u.displayName)}: ${lb}">${avatarOf(u.id, u.displayName)}</span>`).join("")}
+    </div>`;
+
   const tally = `
+    ${strip}
     ${meter}
     <button class="tally" data-action="toggle" data-id="${ev.id}" aria-expanded="${open}">
       <span class="ty">Můžou <b>${yes.length}</b></span>
@@ -1083,13 +1121,18 @@ const STAT_SORTS = {
   beton: ["Betony", (a, b) => b.beton - a.beton]
 };
 
-// Kdo je nejlepší: vrací { value, players } pro nejvyšší kladnou hodnotu (při shodě všichni), jinak null.
-function bestOf(list, valueOf) {
-  const rows = list.map((p) => ({ p, v: valueOf(p) })).filter((x) => Number.isFinite(x.v));
-  if (!rows.length) return null;
-  const top = Math.max(...rows.map((x) => x.v));
-  if (!(top > 0)) return null;
-  return { value: top, players: rows.filter((x) => x.v === top).map((x) => x.p) };
+// Stupně vítězů: seřadí podle hodnoty, při shodě se dělí o medaili. Vrací jen první tři místa (nejvýš 5 řádků).
+const MEDALS = ["🥇", "🥈", "🥉"];
+function podiumRows(list, valueOf) {
+  const rows = list.map((p) => ({ p, v: valueOf(p) })).filter((x) => Number.isFinite(x.v) && x.v > 0).sort((x, y) => y.v - x.v);
+  const out = [];
+  let rank = 0;
+  let prev = null;
+  rows.forEach((x, i) => {
+    if (x.v !== prev) { rank = i + 1; prev = x.v; }
+    if (rank <= 3) out.push({ ...x, rank });
+  });
+  return out.slice(0, 5);
 }
 const kolWord = (n) => (n === 1 ? "kolo" : n >= 2 && n <= 4 ? "kola" : "kol");
 
@@ -1125,28 +1168,17 @@ function viewSeasonStats() {
   }
 
   const tile = (label, value, note, extra = "") => `<div class="tile"><span class="tl">${label}</span><strong>${value}</strong>${note ? `<small class="muted">${note}</small>` : ""}${extra}</div>`;
-  const leader = (lead, text) => {
-    const names = lead.players.map(nameOf);
-    // když se o první místo dělí víc než tři hráči, jména nic neříkají
-    return `<span class="leader">🥇 ${names.length > 3 ? `${names.length} hráčů shodně` : esc(joinNames(names))} <b>${text}</b></span>`;
-  };
-
   // skóre kol a zápasů za celou sezónu je z tabulky ligy (zápasy před zavedením aplikace v ní nejsou)
   const L = state.liga;
   const us = L.status === "ok" ? L.data.standings.find((r) => normTeam(r.team) === normTeam(L.data.team)) : null;
-
-  // nejlepší průměr se vybírá z hráčů s aspoň dvěma zápasy, dokud takový někdo je
-  const qualified = players.filter((p) => p.matches >= 2);
-  const avgLead = bestOf(qualified.length ? qualified : players, (p) => Math.round(p.avg * 10) / 10);
-  const crossLead = bestOf(players, (p) => p.c95 + p.c133 + p.c170);
 
   const tiles = [];
   if (us) {
     tiles.push(tile("Kola v lize", `${us.v + us.vp}–${us.r}–${us.pp + us.p + us.k}`, `výhry, remízy, prohry po ${us.played} ${us.played === 1 ? "kole" : "kolech"}`));
     tiles.push(tile("Zápasy v lize", `${us.scoreFor}:${us.scoreAgainst}`, `legy ${us.legsFor}:${us.legsAgainst}`));
   }
-  tiles.push(tile("Průměr týmu", fmtAvg(t.avg), base ? "ze zapsaných i starších zápasů" : "ze zapsaných zápasů", avgLead ? leader(avgLead, fmtAvg(avgLead.value)) : ""));
-  tiles.push(tile("Naše křížky", `${t.c95} / ${t.c133} / ${t.c170}`, "95+ / 133+ / 170+", crossLead ? leader(crossLead, `${crossLead.value}×`) : ""));
+  tiles.push(tile("Průměr týmu", fmtAvg(t.avg), base ? "ze zapsaných i starších zápasů" : "ze zapsaných zápasů"));
+  tiles.push(tile("Naše křížky", `${t.c95} / ${t.c133} / ${t.c170}`, "95+ / 133+ / 170+"));
   tiles.push(tile("Betony", t.beton, `pokuty ${t.fine} Kč`));
   if (tiles.length % 2) tiles[tiles.length - 1] = tiles[tiles.length - 1].replace('class="tile"', 'class="tile wide"');
   html += `<div class="tiles">${tiles.join("")}</div>`;
@@ -1158,6 +1190,24 @@ function viewSeasonStats() {
     : `Průměr, křížky a betony jsou jen ze zápasů zapsaných v aplikaci (zatím ${recorded} ${kolWord(recorded)}).`}
     Nejlepší průměr se vybírá z hráčů s aspoň dvěma zapsanými zápasy.</p>`;
 
+  const avatarFor = (p) => (p.id && state.users.has(p.id) ? avatarOf(p.id, nameOf(p)) : avatar(nameOf(p)));
+
+  // Stupně vítězů. Nejlepší průměr se vybírá z hráčů s aspoň dvěma zápasy, dokud takový někdo je.
+  const qualified = players.filter((p) => p.matches >= 2);
+  const podiumCard = (title, rows, fmt) => `
+    <section class="podium"><h3>${title}</h3>
+      ${rows.length
+        ? `<ol>${rows.map((r) => `<li class="pd r${r.rank}"><span class="medal" aria-label="${r.rank}. místo">${MEDALS[r.rank - 1]}</span>${avatarFor(r.p)}<span class="pname">${esc(nameOf(r.p))}</span><b>${fmt(r.v)}</b></li>`).join("")}</ol>`
+        : `<p class="muted">Zatím nikdo.</p>`}
+    </section>`;
+  if (players.length) {
+    html += `<h2>Žebříčky</h2><div class="podiums">
+      ${podiumCard("Nejlepší průměr", podiumRows(qualified.length ? qualified : players, (p) => Math.round(p.avg * 10) / 10), fmtAvg)}
+      ${podiumCard("Nejvíc křížků", podiumRows(players, (p) => p.c95 + p.c133 + p.c170), (v) => `${v}×`)}
+      ${podiumCard("Nejvíc výher", podiumRows(players, (p) => p.won), (v) => `${v}`)}
+    </div>`;
+  }
+
   html += `<h2>Naši hráči</h2>
     <label class="sortpick">Řadit podle
       <select data-action="stat-sort" aria-label="Řazení hráčů">${Object.entries(STAT_SORTS).map(([k, [label]]) => `<option value="${k}" ${state.statSort === k ? "selected" : ""}>${label}</option>`).join("")}</select>
@@ -1165,11 +1215,27 @@ function viewSeasonStats() {
   if (!players.length) {
     html += `<p class="muted">Zatím tu nejsou žádné zapsané zápasy hráčů.</p>`;
   } else {
-    html += `<div class="tablewrap"><table class="standings small seasontable">
-      <thead><tr><th>Hráč</th><th>Hrál</th><th>V:P</th><th>Legy</th><th>Průměr</th><th>95+</th><th>133+</th><th>170+</th><th>180</th><th>Betony</th><th>Pokuta</th></tr></thead>
-      <tbody>${players.map((p) => `<tr><td class="nm"><span class="who">${p.id && state.users.has(p.id) ? avatarOf(p.id, nameOf(p)) : avatar(nameOf(p))}<span>${esc(nameOf(p))}</span></span></td><td>${p.matches}</td><td>${p.won}:${p.lost}</td><td>${p.legsW}:${p.legsL}</td><td>${fmtAvg(p.avg)}</td><td>${p.c95}</td><td>${p.c133}</td><td>${p.c170}</td><td>${p.n180}</td><td>${p.beton}</td><td>${p.fine} Kč</td></tr>`).join("")}</tbody>
-      <tfoot><tr><td class="nm">Celkem</td><td>${t.played}</td><td>${t.won}:${t.lost}</td><td>${t.legsW}:${t.legsL}</td><td>${fmtAvg(t.avg)}</td><td>${t.c95}</td><td>${t.c133}</td><td>${t.c170}</td><td>${t.n180}</td><td>${t.beton}</td><td>${t.fine} Kč</td></tr></tfoot>
-    </table></div>
+    const maxAvg = Math.max(0, ...players.map((p) => p.avg));
+    html += `<div class="pcards">${players.map((p, i) => `
+      <article class="pcard">
+        <header class="phead"><span class="rk">${i + 1}.</span>${avatarFor(p)}<h3>${esc(nameOf(p))}</h3><span class="pavg"><small>Ø</small> ${fmtAvg(p.avg)}</span></header>
+        <div class="pbar" aria-hidden="true"><i style="width:${maxAvg ? Math.max(4, Math.round((p.avg / maxAvg) * 100)) : 0}%"></i></div>
+        <dl class="pst">
+          <div><dt>Zápasy</dt><dd>${p.won}:${p.lost}</dd></div>
+          <div><dt>Legy</dt><dd>${p.legsW}:${p.legsL}</dd></div>
+          <div><dt>Hrál</dt><dd>${p.matches}</dd></div>
+          <div><dt>Křížky</dt><dd>${p.c95} / ${p.c133} / ${p.c170}</dd></div>
+          <div><dt>180</dt><dd>${p.n180}</dd></div>
+          <div><dt>Betony</dt><dd>${p.beton} <small>${p.fine} Kč</small></dd></div>
+        </dl>
+      </article>`).join("")}</div>
+    <details class="fulltable"><summary>Celá tabulka</summary>
+      <div class="tablewrap"><table class="standings small seasontable">
+        <thead><tr><th>Hráč</th><th>Hrál</th><th>V:P</th><th>Legy</th><th>Průměr</th><th>95+</th><th>133+</th><th>170+</th><th>180</th><th>Betony</th><th>Pokuta</th></tr></thead>
+        <tbody>${players.map((p) => `<tr><td class="nm"><span class="who">${avatarFor(p)}<span>${esc(nameOf(p))}</span></span></td><td>${p.matches}</td><td>${p.won}:${p.lost}</td><td>${p.legsW}:${p.legsL}</td><td>${fmtAvg(p.avg)}</td><td>${p.c95}</td><td>${p.c133}</td><td>${p.c170}</td><td>${p.n180}</td><td>${p.beton}</td><td>${p.fine} Kč</td></tr>`).join("")}</tbody>
+        <tfoot><tr><td class="nm">Celkem</td><td>${t.played}</td><td>${t.won}:${t.lost}</td><td>${t.legsW}:${t.legsL}</td><td>${fmtAvg(t.avg)}</td><td>${t.c95}</td><td>${t.c133}</td><td>${t.c170}</td><td>${t.n180}</td><td>${t.beton}</td><td>${t.fine} Kč</td></tr></tfoot>
+      </table></div>
+    </details>
     <p class="muted legend">Hrál = zápasy se zapsanými šipkami, V:P výhry a prohry v jednotlivcích. Průměr je z celku (všechny body děleno všemi šipkami). Týmovka a kriket se nezapisují po šipkách, takže v nich nejsou.</p>`;
   }
 
@@ -1490,6 +1556,7 @@ function viewScoring(r, m) {
     <div class="board">
       ${sideOrder.map((side) => `
         <div class="bside ${side} ${turn === side ? "turn" : ""}">
+          ${turn === side ? `<span class="tahu">na tahu</span>` : ""}
           <div class="bname">${esc(nm(side))}</div>
           <div class="brem">${remShow(side)}</div>
           <div class="bmeta">legy ${side === "our" ? ms.our : ms.opp}${side === "our" ? `, průměr ${fmtAvg(so.avg)}` : ""}</div>
@@ -1654,6 +1721,9 @@ function viewTeam() {
         </div>
       </div>`;
   }).join("")}</div>
+  <h2>Vzhled</h2>
+  ${seg(THEMES, themePref(), "theme")}
+  <p class="muted hint">Platí jen na tomhle telefonu. Podle telefonu se řídí nastavením světlého a tmavého režimu v telefonu.</p>
   <p class="logout"><button class="btn" data-action="logout">Odhlásit se</button></p>
   <p class="version"><button class="link" data-action="changelog">Verze ${esc(VERSION)}, co je nového</button></p>`;
 
@@ -2043,6 +2113,33 @@ function handleSlot(n) {
 
 const actStartLeg = (who) => mutateMatch(state.mslot, (legs) => { legs.push(newLeg(who)); });
 
+/* ----- oslava výhry legu a zápasu ----- */
+
+function flashHtml() {
+  const f = state.flash;
+  const ours = f.side === "our";
+  return `<div class="flash ${ours ? "ours" : "opp"} ${f.kind === "match" ? "big" : ""}" role="status">
+    <span class="fi" aria-hidden="true">${ours ? "🏆" : "🎯"}</span>
+    <strong>${esc(f.text)}</strong>
+  </div>`;
+}
+
+// Po zápisu se podívá, jestli kolo rozhodlo leg nebo celý zápas, a ukáže krátkou oslavu.
+function maybeFlash() {
+  const m = state.matches.get(state.mslot);
+  const legs = m?.legs || [];
+  const leg = legs[legs.length - 1];
+  if (!leg?.winner) return;
+  const ms = matchState({ legs, legsToWin: m.legsToWin });
+  const name = leg.winner === "our" ? m.ourName : m.oppName;
+  state.flash = ms.decided
+    ? { kind: "match", side: leg.winner, text: `Zápas vyhrál ${name}` }
+    : { kind: "leg", side: leg.winner, text: `Leg pro ${name}` };
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { state.flash = null; render(); }, 1700);
+  render();
+}
+
 // Zápis kola: side je null, když se má vzít ta strana, která je na tahu.
 async function actEntry(side, value) {
   let accepted = true;
@@ -2054,7 +2151,7 @@ async function actEntry(side, value) {
     if (!chk.ok) { toast(chk.error); accepted = false; return false; }
     legs[legs.length - 1] = who === "our" ? addOur(leg, value, state.padUsed, state.padBeton) : addOpp(leg, value);
   });
-  if (accepted) { resetPad(); render(); }
+  if (accepted) { resetPad(); render(); maybeFlash(); }
 }
 
 async function actUndo() {
@@ -2067,11 +2164,14 @@ async function actUndo() {
   });
 }
 
-const actLegWin = (who) => mutateMatch(state.mslot, (legs) => {
-  const leg = lastLegOf(legs);
-  if (!leg || leg.winner) return false;
-  legs[legs.length - 1] = endLeg(leg, who);
-});
+const actLegWin = async (who) => {
+  await mutateMatch(state.mslot, (legs) => {
+    const leg = lastLegOf(legs);
+    if (!leg || leg.winner) return false;
+    legs[legs.length - 1] = endLeg(leg, who);
+  });
+  maybeFlash();
+};
 
 async function actFinish() {
   const slot = state.mslot;
@@ -2221,6 +2321,7 @@ document.addEventListener("click", async (e) => {
         break;
       case "profile": openProfileDialog(); break;
       case "changelog": openChangelogDialog(); break;
+      case "theme": setTheme(THEMES.some(([k]) => k === t.dataset.v) ? t.dataset.v : "dark"); break;
       case "tview": state.tview = t.dataset.v === "stats" ? "stats" : "list"; render(); window.scrollTo(0, 0); break;
       case "mview": state.mview = ["liga", "stats"].includes(t.dataset.v) ? t.dataset.v : "rounds"; render(); window.scrollTo(0, 0); break;
       case "stats-reload": stopAllMatches(); render(); break;

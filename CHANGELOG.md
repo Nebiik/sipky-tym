@@ -3,6 +3,14 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.22 (24. 11. 2026)
+
+- Statistiky zápasů: nahoře stupně vítězů (🥇🥈🥉) za nejlepší průměr, nejvíc křížků a nejvíc výher. Hráči jsou na kartách s průměrem, grafem a hlavními čísly, celá tabulka je v rozbalovacím detailu.
+- Události: u hlasování jsou kolečka všech hráčů s barevným okrajem (zelený můžu, červený nemůžu, ztlumený nehlasoval).
+- Zápis: větší číslice jako na budíku, u strany na tahu štítek na tahu a jemné pulzování. Po vyhraném legu nebo zápasu se krátce ukáže oslava s pohárem.
+- Světlý vzhled: v záložce Tým jde zvolit Tmavý, Světlý nebo Podle telefonu. Platí jen na daném telefonu, výchozí zůstává tmavý.
+- Plynulé vsunutí obrazovky při přepnutí, terč v prázdných stavech, větší klikací plochy u odkazů a čitelnější text na červených tlačítkách.
+
 ## Verze 0.21.1 (24. 11. 2026)
 
 - Při nahrávání starších zápasů a v Přiřadit hráče jde u hráče zvolit Vynechat (už není v týmu). Takový hráč se z importu odstraní a zmizí ze statistik i ze součtů týmu. Výsledky starších kol zůstávají.

@@ -21,7 +21,7 @@
   --green: #2f9a63;
   --green-text: #74d6a0;
   --brass: #d4b46a;
-  --on-red: #fff7e6;
+  --on-red: #ffffff;
   --on-green: #07150e;
   color-scheme: dark;
 }
@@ -658,3 +658,108 @@ h2.first { margin-top: 0; }
 .maprow { display: grid; gap: .35rem; padding: .65rem 0; border-bottom: 1px solid var(--line); }
 .maprow small { display: block; }
 .maprow select { width: 100%; }
+
+/* ===== vylepšený vzhled: hlasování, statistiky, zápis, přechody ===== */
+
+/* hlasování: kolečka hráčů s barevným okrajem */
+.votestrip { display: flex; flex-wrap: wrap; gap: .45rem; margin: .8rem 0 .55rem; padding: 2px; }
+.vs .av { width: 2.1rem; height: 2.1rem; font-size: .74rem; box-shadow: 0 0 0 2.5px var(--ring, var(--line)); }
+.vs.yes { --ring: var(--green); }
+.vs.no { --ring: var(--red); }
+.vs.none .av { opacity: .42; }
+
+/* statistiky: stupně vítězů */
+.podiums { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.podium { padding: .8rem .9rem; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.podium h3 { margin: 0 0 .5rem; font-size: .95rem; color: var(--dim); }
+.podium ol { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+.pd { display: flex; align-items: center; gap: .6rem; }
+.pd .medal { font-size: 1.35rem; line-height: 1; width: 1.6rem; text-align: center; }
+.pd .av { width: 1.9rem; height: 1.9rem; font-size: .7rem; flex: none; }
+.pd .pname { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.pd b { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.pd.r1 .pname, .pd.r1 b { color: var(--brass); }
+
+/* statistiky: karty hráčů s grafem průměru */
+.pcards { display: grid; gap: .7rem; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); margin-bottom: .8rem; }
+.pcard { padding: .85rem .95rem; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.phead { display: flex; align-items: center; gap: .6rem; }
+.phead h3 { flex: 1; min-width: 0; margin: 0; font-size: 1.08rem; overflow-wrap: anywhere; }
+.phead .rk { width: 1.5rem; color: var(--dim); font-weight: 700; }
+.phead .av { width: 2.1rem; height: 2.1rem; font-size: .76rem; flex: none; }
+.pavg { font-family: "Bricolage Grotesque", system-ui, sans-serif; font-size: 1.55rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pavg small { font-size: .8rem; color: var(--dim); font-weight: 600; }
+.pbar { height: 6px; margin: .6rem 0 .7rem; background: var(--panel-2); border-radius: 99px; overflow: hidden; }
+.pbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--brass)); border-radius: 99px; }
+.pst { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .55rem .6rem; margin: 0; }
+.pst div { min-width: 0; }
+.pst dt { font-size: .74rem; color: var(--dim); font-weight: 600; }
+.pst dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pst dd small { font-weight: 500; color: var(--dim); }
+.fulltable { margin: .4rem 0 .6rem; }
+.fulltable > summary { cursor: pointer; padding: .6rem 0; font-weight: 600; color: var(--dim); }
+
+/* zápis: větší číslice jako na budíku, kdo je na tahu */
+.brem { font-size: clamp(3rem, 16vw, 4.5rem); }
+@media (max-height: 700px) { .brem { font-size: clamp(2.6rem, 13.5vw, 3.5rem); } }
+.bside { position: relative; }
+.tahu { position: absolute; top: 0; left: 50%; transform: translate(-50%, -52%); padding: .05rem .6rem; font-size: .68rem; font-weight: 800; border-radius: 999px; white-space: nowrap; }
+.board { margin-top: .5rem; }
+.bside.our .tahu { background: var(--green); color: var(--on-green); }
+.bside.opp .tahu { background: var(--red); color: var(--on-red); }
+.bside.our.turn { animation: pulse-our 2.4s ease-in-out infinite; }
+.bside.opp.turn { animation: pulse-opp 2.4s ease-in-out infinite; }
+@keyframes pulse-our { 0%, 100% { box-shadow: 0 0 0 0 rgba(47, 154, 99, 0); } 50% { box-shadow: 0 0 0 5px rgba(47, 154, 99, .3); } }
+@keyframes pulse-opp { 0%, 100% { box-shadow: 0 0 0 0 rgba(214, 58, 47, 0); } 50% { box-shadow: 0 0 0 5px rgba(214, 58, 47, .3); } }
+
+/* oslava výhry legu a zápasu */
+.flash { position: fixed; left: 50%; top: 36%; z-index: 60; display: grid; gap: .2rem; justify-items: center; max-width: 86vw; padding: 1rem 1.7rem; text-align: center; pointer-events: none; border-radius: 22px; box-shadow: 0 16px 44px rgba(0, 0, 0, .45); animation: flashpop 1.7s cubic-bezier(.2, .9, .3, 1.15) both; }
+.flash.ours { background: var(--green); color: var(--on-green); }
+.flash.opp { background: var(--red); color: var(--on-red); }
+.flash .fi { font-size: 2.8rem; line-height: 1; }
+.flash strong { font-size: 1.2rem; overflow-wrap: anywhere; }
+.flash.big .fi { font-size: 4.2rem; }
+.flash.big strong { font-size: 1.55rem; }
+@keyframes flashpop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.55); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.07); }
+  24% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -58%) scale(1); }
+}
+
+/* prázdné stavy s terčem */
+.empty::before { content: ""; display: block; width: 76px; height: 76px; margin: 0 auto .8rem; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='46' cy='56' r='38' fill='none' stroke='%23d63a2f' stroke-width='9' opacity='.75'/%3E%3Ccircle cx='46' cy='56' r='23' fill='none' stroke='%232f9a63' stroke-width='9' opacity='.75'/%3E%3Ccircle cx='46' cy='56' r='9' fill='%23d63a2f'/%3E%3Cpath d='M46 56 84 16' stroke='%23d4b46a' stroke-width='4.5' stroke-linecap='round'/%3E%3Cpath d='M84 16l-3 12M84 16l-12 3' stroke='%23d4b46a' stroke-width='4.5' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat; }
+
+/* plynulý přechod mezi obrazovkami */
+#app[data-enter="1"] > main { animation: viewin .26s ease both; }
+@keyframes viewin { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* větší klikací plochy u textových odkazů */
+button.link { padding-block: .5rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  #app[data-enter="1"] > main, .bside.turn { animation: none; }
+  .flash { animation: flashfade 1.7s both; transform: translate(-50%, -50%); }
+  @keyframes flashfade { 0% { opacity: 0; } 12% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/* ===== světlý vzhled ===== */
+:root[data-theme="light"] {
+  --ink: #f5efdc;
+  --panel: #fffcf3;
+  --panel-2: #ece3c8;
+  --cream: #1b2a22;
+  --dim: rgba(27, 42, 34, .72);
+  --line: rgba(27, 42, 34, .17);
+  --red: #c8362c;
+  --red-text: #b3261e;
+  --green: #1f7d4c;
+  --green-text: #17653c;
+  --brass: #86641a;
+  --on-red: #ffffff;
+  --on-green: #ffffff;
+  color-scheme: light;
+}
+:root[data-theme="light"] input::placeholder, :root[data-theme="light"] textarea::placeholder { color: rgba(27, 42, 34, .45); }
+:root[data-theme="light"] dialog::backdrop { background: rgba(27, 42, 34, .45); }
