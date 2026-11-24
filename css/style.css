@@ -650,3 +650,11 @@ h2.first { margin-top: 0; }
 .tile.wide { grid-column: 1 / -1; }
 .tile .leader { margin-top: .35rem; font-size: .92rem; overflow-wrap: anywhere; }
 .tile .leader b { color: var(--brass); }
+
+/* starší zápasy: seznam kol a přiřazení hráčů */
+.slot.legacy { cursor: default; }
+.btnrow { display: flex; flex-wrap: wrap; gap: .5rem; }
+.map-list { max-height: 55vh; overflow: auto; display: grid; gap: 0; }
+.maprow { display: grid; gap: .35rem; padding: .65rem 0; border-bottom: 1px solid var(--line); }
+.maprow small { display: block; }
+.maprow select { width: 100%; }

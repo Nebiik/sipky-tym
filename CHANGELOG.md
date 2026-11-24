@@ -3,6 +3,12 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.21 (24. 11. 2026)
+
+- Starší zápasy z doby před aplikací (z Pechtiku) jdou nahrát ze souboru a přidají se do statistik: zápasy, legy, průměr, křížky a betony hráčů i seznam starších kol. Nahrávat a přiřazovat hráče smí jen správce, čísla vidí všichni členové.
+- Při nahrání se ke každému hráči ze starého systému vybere člen týmu, nebo Bez účtu (pak zůstane ve statistikách pod svým jménem). Přiřazení jde později změnit a import smazat.
+- Průměr se u starších zápasů spojuje s novými podle počtu odehraných legů, protože u starších zápasů nemáme šipky. Křížky a betony se prostě sčítají.
+
 ## Verze 0.20 (24. 11. 2026)
 
 - Statistiky zápasů: dlaždice Kola a Zápasy teď berou skutečnou bilanci za celou sezónu z tabulky ligy (Kola v lize a Zápasy v lize), takže počítají i kola odehraná před zavedením aplikace.

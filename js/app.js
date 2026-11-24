@@ -10,6 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig, TEAM_NAME } from "./firebase-config.js";
 import { VERSION, CHANGELOG } from "./changelog.js";
+import { parseBaselineText, mergeBaseline, sumPlayers } from "./baseline.js";
 import {
   GAMES, MAX_PLAYERS, POINTS_PER_WIN, drawSchedule, computeStandings, tournamentStatus,
   tournamentWinners, playerRanking, headToHead
@@ -59,6 +60,8 @@ const state = {
   padBeton: 0,         // počet betonů vybraný pro kolo našeho hráče
   padUsed: 3,          // šipek na zavření (jen náš hráč)
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
+  baseline: null,      // starší zápasy z doby před aplikací (souhrn za hráče a kola)
+  baselineDraft: null, // rozpracovaný import ve správcovském dialogu
   comments: [],        // komentáře ke všem událostem {id, eventId, uid, text, createdAt, editedAt}
   expandedComments: new Set(),
   view: "events",
@@ -267,6 +270,13 @@ function startData() {
     toast(errMsg(e));
   }));
 
+  dataUnsubs.push(onSnapshot(doc(db, "baseline", "pechtik"), (snap) => {
+    state.baseline = snap.exists() ? snap.data({ serverTimestamps: "estimate" }) : null;
+    render();
+  }, () => {
+    state.baseline = null; // bez nových pravidel se starší zápasy jen nezobrazí
+  }));
+
   dataUnsubs.push(onSnapshot(collectionGroup(db, "comments"), (s) => {
     state.comments = s.docs.map((d) => ({ id: d.id, eventId: d.ref.parent.parent.id, ...d.data({ serverTimestamps: "estimate" }) }));
     state.ready.comments = true;
@@ -317,6 +327,7 @@ function stopData() {
   state.rsvps = new Map();
   state.tournaments = [];
   state.comments = [];
+  state.baseline = null;
   state.tid = null;
   state.rounds = [];
   closeRound();
@@ -1097,9 +1108,11 @@ function viewSeasonStats() {
   }
 
   const all = state.allMatches;
-  const t = teamTotals(all);
+  const base = state.baseline;
   const nameOf = (p) => state.users.get(p.id)?.displayName || p.name;
-  const players = playerTotals(all).sort(STAT_SORTS[state.statSort]?.[1] || STAT_SORTS.wins[1]);
+  // hráči ze zápasů v aplikaci + starší zápasy z importu (pokud je nahraný)
+  const players = mergeBaseline(playerTotals(all), base).sort(STAT_SORTS[state.statSort]?.[1] || STAT_SORTS.wins[1]);
+  const t = base ? sumPlayers(players) : teamTotals(all);
 
   const outcomes = state.rounds.map((r) => roundOutcome(r));
   const rw = outcomes.filter((o) => o === "win").length;
@@ -1107,7 +1120,7 @@ function viewSeasonStats() {
   const rl = outcomes.filter((o) => o === "loss").length;
 
   let html = `${head}<div class="bar"><h1>Statistiky</h1></div>`;
-  if (!all.some((m) => (m.legs || []).length) && !state.rounds.length) {
+  if (!all.some((m) => (m.legs || []).length) && !state.rounds.length && !base) {
     return html + `<div class="empty"><p><strong>Zatím není z čeho počítat.</strong></p><p>Statistiky se naplní, jakmile se zapíše první zápas v nějakém kole.</p></div>`;
   }
 
@@ -1132,7 +1145,7 @@ function viewSeasonStats() {
     tiles.push(tile("Kola v lize", `${us.v + us.vp}–${us.r}–${us.pp + us.p + us.k}`, `výhry, remízy, prohry po ${us.played} ${us.played === 1 ? "kole" : "kolech"}`));
     tiles.push(tile("Zápasy v lize", `${us.scoreFor}:${us.scoreAgainst}`, `legy ${us.legsFor}:${us.legsAgainst}`));
   }
-  tiles.push(tile("Průměr týmu", fmtAvg(t.avg), "ze zapsaných zápasů", avgLead ? leader(avgLead, fmtAvg(avgLead.value)) : ""));
+  tiles.push(tile("Průměr týmu", fmtAvg(t.avg), base ? "ze zapsaných i starších zápasů" : "ze zapsaných zápasů", avgLead ? leader(avgLead, fmtAvg(avgLead.value)) : ""));
   tiles.push(tile("Naše křížky", `${t.c95} / ${t.c133} / ${t.c170}`, "95+ / 133+ / 170+", crossLead ? leader(crossLead, `${crossLead.value}×`) : ""));
   tiles.push(tile("Betony", t.beton, `pokuty ${t.fine} Kč`));
   if (tiles.length % 2) tiles[tiles.length - 1] = tiles[tiles.length - 1].replace('class="tile"', 'class="tile wide"');
@@ -1140,7 +1153,9 @@ function viewSeasonStats() {
 
   const recorded = new Set(all.filter((m) => (m.legs || []).length).map((m) => m.roundId)).size;
   html += `<p class="muted legend">${us ? "Kola a zápasy v lize jsou z tabulky ligy za celou sezónu." : "Kola a zápasy v lize tu nejsou, protože se tabulka ligy teď nenačetla."}
-    Průměr, křížky a betony jsou jen ze zápasů zapsaných v aplikaci (zatím ${recorded} ${kolWord(recorded)}).
+    ${base
+    ? `Průměr, křížky a betony jsou ze zápasů zapsaných v aplikaci (zatím ${recorded} ${kolWord(recorded)}) a ze starších zápasů (${base.rounds.length} ${kolWord(base.rounds.length)}, ${esc(base.source)}). U starších zápasů nemáme šipky ani 180, průměr se s novými spojuje podle počtu odehraných legů.`
+    : `Průměr, křížky a betony jsou jen ze zápasů zapsaných v aplikaci (zatím ${recorded} ${kolWord(recorded)}).`}
     Nejlepší průměr se vybírá z hráčů s aspoň dvěma zapsanými zápasy.</p>`;
 
   html += `<h2>Naši hráči</h2>
@@ -1158,16 +1173,87 @@ function viewSeasonStats() {
     <p class="muted legend">Hrál = zápasy se zapsanými šipkami, V:P výhry a prohry v jednotlivcích. Průměr je z celku (všechny body děleno všemi šipkami). Týmovka a kriket se nezapisují po šipkách, takže v nich nejsou.</p>`;
   }
 
-  if (state.rounds.length) {
-    html += `<h2>Kola</h2><div class="slots">${state.rounds.map((r) => {
-      const out = roundOutcome(r);
-      return `<button class="slot ${out === "win" ? "won" : out === "loss" ? "lost" : ""}" data-action="round-open" data-id="${r.id}">
-        <span class="no" aria-hidden="true">${out === "win" ? "🏆" : out === "loss" ? "✗" : out === "draw" ? "=" : "…"}</span>
-        <span class="slot-name">vs. ${esc(r.opponent)} <span class="muted">${dateText(r.date)}</span></span>
-        <span class="slot-res">${r.ourWins || 0} : ${r.oppWins || 0}</span></button>`;
+  const dayText = (d) => `${d.getDate()}. ${d.getMonth() + 1}. ${d.getFullYear()}`;
+  const roundRows = [
+    ...state.rounds.map((r) => ({ id: r.id, date: r.date.toDate(), opponent: r.opponent, ourWins: r.ourWins || 0, oppWins: r.oppWins || 0, out: roundOutcome(r) })),
+    ...(base?.rounds || []).map((r) => ({ id: null, date: new Date(`${r.date}T12:00:00`), opponent: r.opponent, ourWins: r.ourWins, oppWins: r.oppWins, out: roundOutcome({ ourWins: r.ourWins, oppWins: r.oppWins, played: SLOT_COUNT }) }))
+  ].sort((a, b) => b.date - a.date);
+  if (roundRows.length) {
+    html += `<h2>Kola</h2><div class="slots">${roundRows.map((r) => {
+      const cls = `slot ${r.out === "win" ? "won" : r.out === "loss" ? "lost" : ""}`;
+      const inner = `
+        <span class="no" aria-hidden="true">${r.out === "win" ? "🏆" : r.out === "loss" ? "✗" : r.out === "draw" ? "=" : "…"}</span>
+        <span class="slot-name">vs. ${esc(r.opponent)} <span class="muted">${dayText(r.date)}${r.id ? "" : ", starší kolo"}</span></span>
+        <span class="slot-res">${r.ourWins} : ${r.oppWins}</span>`;
+      return r.id ? `<button class="${cls}" data-action="round-open" data-id="${r.id}">${inner}</button>` : `<div class="${cls} legacy">${inner}</div>`;
     }).join("")}</div>`;
   }
+
+  // nahrávání starších zápasů je jen pro správce
+  if (state.me.role === "admin") {
+    html += `<h2>Starší zápasy</h2>`;
+    if (base) {
+      const when = base.importedAt?.toDate ? `, nahráno ${dayText(base.importedAt.toDate())}` : "";
+      html += `<p class="muted">${esc(base.source)}: ${base.rounds.length} ${kolWord(base.rounds.length)}, ${base.players.length} hráčů${when}.</p>
+        <div class="btnrow"><button class="btn" data-action="baseline-edit">Přiřadit hráče</button><button class="btn danger" data-action="baseline-delete">Smazat import</button></div>`;
+    } else {
+      html += `<p class="muted">Zápasy z doby před aplikací (třeba z Pechtiku) můžeš nahrát ze souboru. Přidají se do statistik.</p>
+        <button class="btn" data-action="baseline-import">Nahrát starší zápasy</button>`;
+    }
+  }
   return html;
+}
+
+/* ----- nahrání starších zápasů (jen správce) ----- */
+
+function openBaselineDialog(edit) {
+  if (edit) {
+    state.baselineDraft = JSON.parse(JSON.stringify(state.baseline));
+    renderBaselineMapping(true);
+    return;
+  }
+  state.baselineDraft = null;
+  $dlg.innerHTML = `
+    <form id="baselineForm" class="stack" data-step="paste">
+      <h2>Nahrát starší zápasy</h2>
+      <p class="muted">Vyber soubor s importem, nebo vlož jeho obsah. Hned potom uvidíš, co se nahraje, a přiřadíš hráče ke členům týmu.</p>
+      <label>Soubor<input type="file" id="baselineFile" accept=".json,application/json"></label>
+      <label>Nebo vlož obsah<textarea name="text" rows="6" placeholder="{ ... }"></textarea></label>
+      <p class="err" id="baselineErr" hidden></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-dlg="close">Zrušit</button>
+        <button type="submit" class="btn primary">Zkontrolovat</button>
+      </div>
+    </form>`;
+  if (!$dlg.open) $dlg.showModal();
+}
+
+function renderBaselineMapping(edit) {
+  const d = state.baselineDraft;
+  const members = [...state.users.values()].filter((u) => isMemberRole(u.role)).sort(byName);
+  // předvybere člena podle uloženého přiřazení, jinak podle shodného jména
+  const preselect = (p) => (p.uid && state.users.has(p.uid) ? p.uid : members.find((u) => u.displayName.toLowerCase() === p.key.toLowerCase())?.id || "");
+  $dlg.innerHTML = `
+    <form id="baselineForm" class="stack" data-step="map" data-edit="${edit ? "1" : ""}">
+      <h2>Přiřaď hráče</h2>
+      <p class="muted">${d.rounds.length} ${kolWord(d.rounds.length)} a ${d.players.length} hráčů. Ke každému hráči vyber člena týmu, nebo nech Bez účtu (zůstane ve statistikách pod svým jménem). Vybraná čísla se přičtou k jeho zápasům v aplikaci.</p>
+      <div class="map-list">${d.players.map((p, i) => `
+        <div class="maprow">
+          <div><strong>${esc(p.key)}</strong><small class="muted">zápasy ${p.won}:${p.lost}, legy ${p.legsW}:${p.legsL}, Ø ${fmtAvg(p.avg)}${p.avgApprox ? " (odhad)" : ""}, křížky ${p.c95}/${p.c133}/${p.c170}, betony ${p.beton}</small></div>
+          <select name="map-${i}" aria-label="Člen týmu pro ${esc(p.key)}">
+            <option value="">Bez účtu</option>
+            ${members.map((u) => `<option value="${esc(u.id)}" ${preselect(p) === u.id ? "selected" : ""}>${esc(u.displayName)}</option>`).join("")}
+          </select>
+        </div>`).join("")}
+      </div>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-dlg="close">Zrušit</button>
+        <button type="submit" class="btn primary">${edit ? "Uložit přiřazení" : "Nahrát"}</button>
+      </div>
+    </form>`;
+  if (!$dlg.open) $dlg.showModal();
 }
 
 /* ----- liga ze sipky.org ----- */
@@ -2110,6 +2196,13 @@ document.addEventListener("click", async (e) => {
       case "new-event": openEventDialog(); break;
       case "edit-event": openEventDialog(id); break;
       case "rsvp": await setRsvp(id, status); break;
+      case "baseline-import": if (state.me.role === "admin") openBaselineDialog(false); break;
+      case "baseline-edit": if (state.me.role === "admin" && state.baseline) openBaselineDialog(true); break;
+      case "baseline-delete":
+        if (state.me.role !== "admin" || !confirm("Smazat nahrané starší zápasy? Ze statistik zmizí. Soubor s importem zůstane, takže je jde nahrát znovu.")) break;
+        await deleteDoc(doc(db, "baseline", "pechtik"));
+        toast("Starší zápasy jsou smazané.");
+        break;
       case "comment-new": openCommentDialog(id); break;
       case "comment-edit": openCommentDialog(id, t.dataset.cid); break;
       case "comment-del":
@@ -2218,7 +2311,13 @@ document.addEventListener("click", async (e) => {
   }
 });
 
-document.addEventListener("change", (e) => {
+document.addEventListener("change", async (e) => {
+  if (e.target.id === "baselineFile") {
+    const file = e.target.files?.[0];
+    const box = e.target.closest("form")?.querySelector("textarea[name=text]");
+    if (file && box) box.value = await file.text();
+    return;
+  }
   const ss = e.target.closest("[data-action='stat-sort']");
   if (ss) { state.statSort = ss.value; render(); return; }
   const sel = e.target.closest("[data-action='h2h']");
@@ -2350,6 +2449,29 @@ document.addEventListener("submit", async (e) => {
       return;
     }
 
+    if (f.id === "baselineForm") {
+      if (state.me.role !== "admin") { toast("Tohle smí jen správce."); return; }
+      if (f.dataset.step === "paste") {
+        const res = parseBaselineText(fd.get("text") || "");
+        const err = f.querySelector("#baselineErr");
+        if (!res.ok) { err.textContent = res.error; err.hidden = false; return; }
+        state.baselineDraft = res.data;
+        renderBaselineMapping(false);
+        return;
+      }
+      const d = state.baselineDraft;
+      const players = d.players.map((p, i) => ({ ...p, uid: fd.get(`map-${i}`) || null }));
+      if (f.dataset.edit) {
+        await updateDoc(doc(db, "baseline", "pechtik"), { players });
+        toast("Přiřazení je uložené.");
+      } else {
+        await setDoc(doc(db, "baseline", "pechtik"), { source: d.source, importedAt: serverTimestamp(), rounds: d.rounds, players });
+        toast("Starší zápasy jsou nahrané.");
+      }
+      state.baselineDraft = null;
+      closeDialog();
+      return;
+    }
     if (f.id === "commentForm") {
       const text = (fd.get("text") || "").trim().slice(0, COMMENT_MAX);
       if (!text) { toast("Napiš komentář."); return; }

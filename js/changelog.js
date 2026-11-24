@@ -1,7 +1,16 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.20";
+export const VERSION = "0.21";
 
 export const CHANGELOG = [
+  {
+    version: "0.21",
+    date: "24. 11. 2026",
+    changes: [
+      "Starší zápasy z doby před aplikací (z Pechtiku) jdou nahrát ze souboru a přidají se do statistik: zápasy, legy, průměr, křížky a betony hráčů i seznam starších kol. Nahrávat a přiřazovat hráče smí jen správce, čísla vidí všichni členové.",
+      "Při nahrání se ke každému hráči ze starého systému vybere člen týmu, nebo Bez účtu (pak zůstane ve statistikách pod svým jménem). Přiřazení jde později změnit a import smazat.",
+      "Průměr se u starších zápasů spojuje s novými podle počtu odehraných legů, protože u starších zápasů nemáme šipky. Křížky a betony se prostě sčítají."
+    ]
+  },
   {
     version: "0.20",
     date: "24. 11. 2026",
