@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-11-23T12:37:01.331Z",
-  "sourceSync": "23.11.2026 11:48",
+  "checkedAt": "2026-11-24T02:12:43.980Z",
+  "sourceSync": "24.11.2026 03:12",
   "source": "sipky.org (UŠO, systém Leguan)",
   "sourceUrl": "https://www.sipky.org/?region=jmoss&page=ligova-skupina&league=82945",
   "group": "2. liga C (neděle)",
@@ -42,18 +42,18 @@
     {
       "rank": 3,
       "team": "Double Trouble Brno",
-      "played": 5,
-      "v": 4,
+      "played": 6,
+      "v": 5,
       "vp": 1,
       "r": 0,
       "pp": 0,
       "p": 0,
       "k": 0,
-      "scoreFor": 65,
-      "scoreAgainst": 26,
-      "legsFor": 142,
-      "legsAgainst": 80,
-      "points": 14
+      "scoreFor": 76,
+      "scoreAgainst": 33,
+      "legsFor": 167,
+      "legsAgainst": 101,
+      "points": 17
     },
     {
       "rank": 4,
@@ -106,17 +106,17 @@
     {
       "rank": 7,
       "team": "Podchod klub Brno",
-      "played": 7,
+      "played": 8,
       "v": 2,
       "vp": 0,
       "r": 0,
       "pp": 1,
-      "p": 4,
+      "p": 5,
       "k": 0,
-      "scoreFor": 56,
-      "scoreAgainst": 71,
-      "legsFor": 139,
-      "legsAgainst": 165,
+      "scoreFor": 63,
+      "scoreAgainst": 82,
+      "legsFor": 160,
+      "legsAgainst": 190,
       "points": 7
     },
     {
