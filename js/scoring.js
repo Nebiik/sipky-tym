@@ -351,3 +351,23 @@ export function undoVisit(leg) {
   }
   return L;
 }
+
+/* ---------- pevný rozpis jednotlivců z ligového zápisového archu ---------- */
+
+// Číslo zápasu -> [pozice domácího D, pozice hostů H]. Každý z 4 domácích hraje s každým ze 4 hostů právě jednou.
+// Zápasy 9 (týmovka) a 10 (kriket) v rozpisu nejsou, tam se dvojice losují.
+export const SLOT_PAIRS = {
+  1: [1, 3], 2: [2, 4], 3: [3, 1], 4: [4, 2], 5: [1, 4], 6: [2, 3], 7: [3, 2], 8: [4, 1],
+  11: [1, 2], 12: [2, 1], 13: [3, 4], 14: [4, 3], 15: [1, 1], 16: [2, 2], 17: [3, 3], 18: [4, 4]
+};
+
+// Dvojice zápasu tak, jak je na archu, třeba D1–H3. U týmovky a kriketu prázdné.
+export const slotPairText = (slot) => (SLOT_PAIRS[slot] ? `D${SLOT_PAIRS[slot][0]}–H${SLOT_PAIRS[slot][1]}` : "");
+
+// Pozice soupeře v zápase (1 až 4). Doma jsme D a soupeř je H, venku jsme H a soupeř je D.
+// Když se neví, jestli hrajeme doma, nebo je to týmovka, vrací null.
+export function opponentPosition(slot, home) {
+  const p = SLOT_PAIRS[slot];
+  if (!p || typeof home !== "boolean") return null;
+  return home ? p[1] : p[0];
+}

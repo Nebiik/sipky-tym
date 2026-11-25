@@ -3,6 +3,13 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.23 (25. 11. 2026)
+
+- Při zahájení zápasu je soupeř předvyplněný podle pevného rozpisu ze zápisového archu (třeba zápas 1 je D1–H3, zápas 2 D2–H4). Předvyplnění jde změnit a týmovka s kriketem se nepředvyplňují.
+- U volných zápasů v kole je vidět dvojice z archu (D1–H3 a tak dál).
+- V dialogu kola přibyla volba Kde se hraje: Doma nebo Venku, protože soupeř je podle toho na archu H nebo D. Z ligového rozpisu se vybere sama. Když nevyplníš jména soupeřů, pojmenují se H1 až H8 (doma) nebo D1 až D8 (venku).
+- U starších kol, která si nepamatují, kde se hrálo, se soupeř nepředvyplňuje. Stačí v Upravit vybrat Doma nebo Venku.
+
 ## Verze 0.22 (24. 11. 2026)
 
 - Statistiky zápasů: nahoře stupně vítězů (🥇🥈🥉) za nejlepší průměr, nejvíc křížků a nejvíc výher. Hráči jsou na kartách s průměrem, grafem a hlavními čísly, celá tabulka je v rozbalovacím detailu.

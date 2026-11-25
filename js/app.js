@@ -19,7 +19,7 @@ import {
   START, other, dartLabel, newLeg, remaining, turnOf, needsBull,
   checkEntry, addOur, addOpp, endLeg, undoVisit, isEmptyLeg, crossOf, sideStats, tally, matchState,
   roundSummary, playerTotals, visitBetons, BETON_FINE,
-  roundOutcome, opponentTotals, teamTotals
+  roundOutcome, opponentTotals, teamTotals, slotPairText, opponentPosition
 } from "./scoring.js";
 
 /* ---------- základ ---------- */
@@ -1015,7 +1015,7 @@ function slotRow(n, nextN) {
     right = m ? `${res.our} : ${res.opp}` : `<span class="muted">zapsat výsledek</span>`;
     if (m && res.our > res.opp) cls = "won"; else if (m && res.opp > res.our) cls = "lost";
   } else if (!m) {
-    name = `<span class="muted">Volný zápas</span>`;
+    name = `<span class="muted">Volný zápas</span> <span class="pair">${slotPairText(n)}</span>`;
     right = n === nextN ? `<span class="chipnext">další</span>` : "";
   } else if (m.status === "done") {
     name = `${esc(m.ourName)} <span class="muted">vs.</span> ${esc(m.oppName)}`;
@@ -1042,7 +1042,7 @@ function viewRound(r) {
   let html = `
     <p class="crumb"><button class="link" data-action="round-back">‹ Všechna kola</button></p>
     <div class="bar">
-      <div><h1>vs. ${esc(r.opponent)}</h1><p class="muted meta">${dateText(r.date)}</p></div>
+      <div><h1>vs. ${esc(r.opponent)}</h1><p class="muted meta">${dateText(r.date)}${r.home === true ? " · doma" : r.home === false ? " · venku" : ""}</p></div>
       ${manage ? `<button class="btn" data-action="round-edit" data-id="${r.id}">Upravit</button>` : ""}
     </div>
     <div class="roundscore ${outcome || ""}">
@@ -1915,11 +1915,17 @@ function openRoundDialog(id, preset) {
   const members = [...state.users.values()].filter((u) => isMemberRole(u.role)).sort(byName);
   const d = r ? r.date.toDate() : preset?.date || new Date();
   const dateVal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // starší kola nemají uloženo, kde se hrálo: u nich není nic vybráno a soupeř se nepředvyplňuje
+  const homeVal = r ? r.home : preset?.home ?? true;
   $dlg.innerHTML = `
     <form id="roundForm" class="stack" data-id="${r?.id || ""}">
       <h2>${r ? "Upravit kolo" : "Nové ligové kolo"}</h2>
       <label>Soupeř<input name="opponent" required maxlength="60" placeholder="Např. Double Trouble Brno B" value="${esc(r?.opponent || preset?.opponent || "")}"></label>
       <label>Datum<input type="date" name="date" required value="${dateVal}"></label>
+      <fieldset class="types"><legend>Kde se hraje</legend>
+        <label class="chip"><input type="radio" name="home" value="1" ${homeVal === true ? "checked" : ""}><span>Doma</span></label>
+        <label class="chip"><input type="radio" name="home" value="0" ${homeVal === false ? "checked" : ""}><span>Venku</span></label>
+      </fieldset>
       <fieldset class="players">
         <legend>Naši hráči <span id="pcount" class="muted"></span></legend>
         <div class="chips">${members.map((u) => `
@@ -1932,7 +1938,7 @@ function openRoundDialog(id, preset) {
         <div id="guestList" class="chips"></div>
       </fieldset>
       <label>Hráči soupeře
-        <textarea name="opp" rows="6" placeholder="Jeden hráč na řádek, v pořadí. Když nic nevyplníš, použije se H1 až H8.">${esc((r?.oppPlayers || []).map((p) => p.name).join("\n"))}</textarea>
+        <textarea name="opp" rows="6" placeholder="Jeden hráč na řádek, v pořadí podle zápisového archu (1 až 4, dál náhradníci). Když nic nevyplníš, použije se H1 až H8 (doma) nebo D1 až D8 (venku).">${esc((r?.oppPlayers || []).map((p) => p.name).join("\n"))}</textarea>
       </label>
       <div class="actions">
         ${r ? `<button type="button" class="btn danger" data-dlg="rdelete" data-id="${r.id}">Smazat kolo</button>` : ""}
@@ -1952,10 +1958,13 @@ function openMatchStartDialog(slot) {
   if (!our.length) { toast("Nejdřív v kole (Upravit) vyber naše hráče."); return; }
   const singles = [...state.matches.values()].filter((x) => x.kind === "single");
   const cnt = (key, id) => singles.filter((x) => x[key] === id).length;
-  const chip = (name, id, value, key) => {
+  const chip = (name, id, value, key, checked = false) => {
     const c = cnt(key, id);
-    return `<label class="chip"><input type="radio" name="${name}" value="${esc(id)}"><span>${esc(value)}${c ? ` <small class="muted">${c}×</small>` : ""}</span></label>`;
+    return `<label class="chip"><input type="radio" name="${name}" value="${esc(id)}" ${checked ? "checked" : ""}><span>${esc(value)}${c ? ` <small class="muted">${c}×</small>` : ""}</span></label>`;
   };
+  // soupeř podle pevného rozpisu z archu (pořadí hráčů soupeře = pozice 1 až 4), jen když víme, kde se hraje
+  const pos = opponentPosition(slot, r.home);
+  const pre = pos ? opp[pos - 1]?.id : null;
   $dlg.innerHTML = `
     <form id="matchStartForm" class="stack" data-slot="${slot}">
       <h2>Zápas ${slot}</h2>
@@ -1963,8 +1972,9 @@ function openMatchStartDialog(slot) {
         ${our.map((p) => chip("our", p.id, p.name, "ourId")).join("")}
       </fieldset>
       <fieldset class="types"><legend>Soupeř</legend>
-        ${opp.map((p) => chip("opp", p.id, p.name, "oppId")).join("")}
+        ${opp.map((p) => chip("opp", p.id, p.name, "oppId", p.id === pre)).join("")}
       </fieldset>
+      ${pre ? `<p class="muted hint">Podle rozpisu je to ${slotPairText(slot)}, soupeř je předvyplněný. Dá se změnit.</p>` : ""}
       <div class="actions">
         <span class="spacer"></span>
         <button type="button" class="btn" data-dlg="close">Zrušit</button>
@@ -2355,7 +2365,7 @@ document.addEventListener("click", async (e) => {
         // když existuje událost Zápas ve stejný den, vezme se z ní sestava a náhradníci
         const ev = isNaN(when) ? null : state.events.find((e) => e.type === "match" && sameDay(e.startsAt.toDate(), when));
         const members = ev ? [...(ev.lineup || []), ...(ev.subs || [])].filter((u) => state.users.has(u)) : [];
-        openRoundDialog(null, { opponent: homeUs ? f.away : f.home, date: isNaN(when) ? undefined : when, members });
+        openRoundDialog(null, { opponent: homeUs ? f.away : f.home, date: isNaN(when) ? undefined : when, members, home: homeUs });
         break;
       }
       case "round-new": openRoundDialog(); break;
@@ -2650,10 +2660,17 @@ document.addEventListener("submit", async (e) => {
         ...dlgGuests.map((g) => ({ id: g.id, name: g.name, uid: null }))
       ];
       if (ourPlayers.length > MAX_PLAYERS) { toast(`Nejvíc ${MAX_PLAYERS} hráčů.`); return; }
+      const homeRaw = fd.get("home");
+      const home = homeRaw === "1" ? true : homeRaw === "0" ? false : undefined;
       let names = String(fd.get("opp") || "").split("\n").map((x) => x.trim().slice(0, 30)).filter(Boolean).slice(0, 12);
-      if (!names.length) names = Array.from({ length: 8 }, (_, i) => `H${i + 1}`);
+      // prázdné nebo jen výchozí názvy se pojmenují jako na archu: soupeř je H, když hrajeme doma, a D, když venku
+      const generic = names.length > 0 && names.every((n, i) => n === `H${i + 1}` || n === `D${i + 1}`);
+      if (!names.length || generic) {
+        const letter = home === false ? "D" : "H";
+        names = Array.from({ length: generic ? names.length : 8 }, (_, i) => `${letter}${i + 1}`);
+      }
       const oppPlayers = names.map((name, i) => ({ id: `h${i + 1}`, name }));
-      const data = { opponent, date: Timestamp.fromDate(when), ourPlayers, oppPlayers };
+      const data = { opponent, date: Timestamp.fromDate(when), ourPlayers, oppPlayers, ...(home === undefined ? {} : { home }) };
       const id = f.dataset.id;
       if (id) {
         await updateDoc(doc(db, "rounds", id), data);
