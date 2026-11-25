@@ -767,3 +767,10 @@ button.link { padding-block: .5rem; }
 /* rozpis zápasů z archu */
 .pair:empty { display: none; }
 .pair { margin-left: .4rem; padding: .05rem .4rem; font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--dim); border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; }
+
+/* sestava podle archu v kole */
+.lineup-panel { margin: .2rem 0 .4rem; }
+.lp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem .7rem; }
+.lp-row { display: grid; grid-template-columns: 2.4rem 1fr; align-items: center; gap: .4rem; }
+.lp-pos { font-weight: 800; color: var(--dim); }
+.lp-row select { width: 100%; min-width: 0; }

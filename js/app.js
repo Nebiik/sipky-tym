@@ -19,7 +19,7 @@ import {
   START, other, dartLabel, newLeg, remaining, turnOf, needsBull,
   checkEntry, addOur, addOpp, endLeg, undoVisit, isEmptyLeg, crossOf, sideStats, tally, matchState,
   roundSummary, playerTotals, visitBetons, BETON_FINE,
-  roundOutcome, opponentTotals, teamTotals, slotPairText, opponentPosition
+  roundOutcome, opponentTotals, teamTotals, slotPairText, opponentPosition, ourPosition, padLineup, setLineupPosition
 } from "./scoring.js";
 
 /* ---------- základ ---------- */
@@ -60,6 +60,7 @@ const state = {
   padBeton: 0,         // počet betonů vybraný pro kolo našeho hráče
   padUsed: 3,          // šipek na zavření (jen náš hráč)
   rsvps: new Map(),    // eventId -> Map(uid -> {status, note})
+  presetLineup: null,  // sestava navržená při zakládání kola (z události)
   flash: null,         // krátká oslava výhry legu nebo zápasu
   baseline: null,      // starší zápasy z doby před aplikací (souhrn za hráče a kola)
   baselineDraft: null, // rozpracovaný import ve správcovském dialogu
@@ -1032,6 +1033,29 @@ function slotRow(n, nextN) {
     </button>`;
 }
 
+// Sestava podle zápisového archu: kdo hraje na které pozici (D1 až D4 doma, H1 až H4 venku). Mění se kdykoli a týká
+// se jen zápasů, které ještě nezačaly, protože podle ní se jen předvyplňuje začátek zápasu.
+function lineupPanel(r) {
+  if (typeof r.home !== "boolean") {
+    return `<p class="muted hint lineup-hint">Sestavu podle archu zapneš tím, že v Upravit vybereš, jestli se hraje doma, nebo venku.</p>`;
+  }
+  const our = r.ourPlayers || [];
+  if (!our.length) return "";
+  const letter = r.home ? "D" : "H";
+  const lineup = padLineup(r.lineup);
+  const opts = (sel) => `<option value="">–</option>${our.map((p) => `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>${esc(p.name)}</option>`).join("")}`;
+  const subs = our.filter((p) => !lineup.includes(p.id));
+  return `
+    <section class="lineup-panel">
+      <h2>Sestava podle archu</h2>
+      <div class="lp-grid">${[0, 1, 2, 3].map((i) => `
+        <label class="lp-row"><span class="lp-pos">${letter}${i + 1}</span>
+          <select data-action="lineup" data-i="${i}" aria-label="Pozice ${letter}${i + 1}">${opts(lineup[i])}</select></label>`).join("")}
+      </div>
+      <p class="muted hint">${subs.length ? `Náhradníci: ${subs.map((p) => esc(p.name)).join(", ")}. ` : ""}Podle sestavy se při zahájení zápasu předvyplní náš hráč i soupeř. Změna se týká jen zápasů, které ještě nezačaly.</p>
+    </section>`;
+}
+
 function viewRound(r) {
   const all = [...state.matches.values()];
   const sum = roundSummary(all);
@@ -1051,6 +1075,7 @@ function viewRound(r) {
       <span class="rs-team">${esc(r.opponent)}</span>
     </div>
     ${outcome ? `<p class="outcomebar ${outcome}">${OUTCOME[outcome].banner}</p>` : ""}
+    ${lineupPanel(r)}
     <h2>Zápasy</h2>
     <div class="slots">${Array.from({ length: SLOT_COUNT }, (_, i) => slotRow(i + 1, nextN)).join("")}</div>`;
 
@@ -1917,6 +1942,7 @@ function openRoundDialog(id, preset) {
   const dateVal = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   // starší kola nemají uloženo, kde se hrálo: u nich není nic vybráno a soupeř se nepředvyplňuje
   const homeVal = r ? r.home : preset?.home ?? true;
+  state.presetLineup = preset?.lineup || null;
   $dlg.innerHTML = `
     <form id="roundForm" class="stack" data-id="${r?.id || ""}">
       <h2>${r ? "Upravit kolo" : "Nové ligové kolo"}</h2>
@@ -1965,16 +1991,24 @@ function openMatchStartDialog(slot) {
   // soupeř podle pevného rozpisu z archu (pořadí hráčů soupeře = pozice 1 až 4), jen když víme, kde se hraje
   const pos = opponentPosition(slot, r.home);
   const pre = pos ? opp[pos - 1]?.id : null;
+  // náš hráč podle sestavy v kole (D1 až D4 doma, H1 až H4 venku)
+  const ourPos = ourPosition(slot, r.home);
+  const wanted = ourPos ? padLineup(r.lineup)[ourPos - 1] : null;
+  const preOur = wanted && our.some((p) => p.id === wanted) ? wanted : null;
+  const nameIn = (list, id) => list.find((p) => p.id === id)?.name;
+  const hintText = pre || preOur
+    ? `Podle rozpisu ${slotPairText(slot)}: ${preOur && pre ? `${nameIn(our, preOur)} proti ${nameIn(opp, pre)}` : preOur ? `hraje ${nameIn(our, preOur)}` : `soupeř je ${nameIn(opp, pre)}`}. Předvyplněno, dá se změnit.`
+    : "";
   $dlg.innerHTML = `
     <form id="matchStartForm" class="stack" data-slot="${slot}">
       <h2>Zápas ${slot}</h2>
       <fieldset class="types"><legend>Náš hráč</legend>
-        ${our.map((p) => chip("our", p.id, p.name, "ourId")).join("")}
+        ${our.map((p) => chip("our", p.id, p.name, "ourId", p.id === preOur)).join("")}
       </fieldset>
       <fieldset class="types"><legend>Soupeř</legend>
         ${opp.map((p) => chip("opp", p.id, p.name, "oppId", p.id === pre)).join("")}
       </fieldset>
-      ${pre ? `<p class="muted hint">Podle rozpisu je to ${slotPairText(slot)}, soupeř je předvyplněný. Dá se změnit.</p>` : ""}
+      ${hintText ? `<p class="muted hint">${esc(hintText)}</p>` : ""}
       <div class="actions">
         <span class="spacer"></span>
         <button type="button" class="btn" data-dlg="close">Zrušit</button>
@@ -2365,7 +2399,7 @@ document.addEventListener("click", async (e) => {
         // když existuje událost Zápas ve stejný den, vezme se z ní sestava a náhradníci
         const ev = isNaN(when) ? null : state.events.find((e) => e.type === "match" && sameDay(e.startsAt.toDate(), when));
         const members = ev ? [...(ev.lineup || []), ...(ev.subs || [])].filter((u) => state.users.has(u)) : [];
-        openRoundDialog(null, { opponent: homeUs ? f.away : f.home, date: isNaN(when) ? undefined : when, members, home: homeUs });
+        openRoundDialog(null, { opponent: homeUs ? f.away : f.home, date: isNaN(when) ? undefined : when, members, home: homeUs, lineup: ev ? (ev.lineup || []).filter((u) => state.users.has(u)) : undefined });
         break;
       }
       case "round-new": openRoundDialog(); break;
@@ -2424,6 +2458,17 @@ document.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  const lp = e.target.closest("[data-action='lineup']");
+  if (lp) {
+    const r = curRound();
+    if (!r) return;
+    try {
+      await updateDoc(doc(db, "rounds", r.id), { lineup: setLineupPosition(r.lineup, Number(lp.dataset.i), lp.value) });
+    } catch (err) {
+      toast(errMsg(err));
+    }
+    return;
+  }
   if (e.target.id === "baselineFile") {
     const file = e.target.files?.[0];
     const box = e.target.closest("form")?.querySelector("textarea[name=text]");
@@ -2670,7 +2715,11 @@ document.addEventListener("submit", async (e) => {
         names = Array.from({ length: generic ? names.length : 8 }, (_, i) => `${letter}${i + 1}`);
       }
       const oppPlayers = names.map((name, i) => ({ id: `h${i + 1}`, name }));
-      const data = { opponent, date: Timestamp.fromDate(when), ourPlayers, oppPlayers, ...(home === undefined ? {} : { home }) };
+      // sestava podle archu: u úpravy zůstává, při zakládání se vezme z navržené (události), pryč jdou hráči, kteří už v kole nejsou
+      const ourIds = new Set(ourPlayers.map((p) => p.id));
+      const prevRound = f.dataset.id ? state.rounds.find((x) => x.id === f.dataset.id) : null;
+      const lineup = padLineup(prevRound ? prevRound.lineup : state.presetLineup).map((x) => (ourIds.has(x) ? x : ""));
+      const data = { opponent, date: Timestamp.fromDate(when), ourPlayers, oppPlayers, lineup, ...(home === undefined ? {} : { home }) };
       const id = f.dataset.id;
       if (id) {
         await updateDoc(doc(db, "rounds", id), data);

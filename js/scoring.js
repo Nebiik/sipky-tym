@@ -371,3 +371,26 @@ export function opponentPosition(slot, home) {
   if (!p || typeof home !== "boolean") return null;
   return home ? p[1] : p[0];
 }
+
+// Pozice našeho hráče v zápase (1 až 4). Doma jsme D, venku jsme H.
+export function ourPosition(slot, home) {
+  const p = SLOT_PAIRS[slot];
+  if (!p || typeof home !== "boolean") return null;
+  return home ? p[0] : p[1];
+}
+
+// Sestava podle archu vždy o čtyřech pozicích, prázdná pozice je "".
+export const padLineup = (list) => [0, 1, 2, 3].map((i) => (Array.isArray(list) && typeof list[i] === "string" ? list[i] : ""));
+
+// Přesune hráče na pozici. Je-li už na jiné pozici, obě se prohodí, takže nikdo není na dvou místech.
+export function setLineupPosition(list, index, id) {
+  const l = padLineup(list);
+  if (index < 0 || index > 3) return l;
+  const prev = l[index];
+  if (id) {
+    const at = l.indexOf(id);
+    if (at >= 0 && at !== index) l[at] = prev;
+  }
+  l[index] = id || "";
+  return l;
+}

@@ -3,6 +3,13 @@
 Nejnovější je nahoře. Stejný přehled je v aplikaci v záložce Tým.
 
 
+## Verze 0.24 (25. 11. 2026)
+
+- V kole je nahoře blok Sestava podle archu: vybereš, kdo hraje na pozici D1 až D4 (doma), nebo H1 až H4 (venku). Hráč nemůže být na dvou pozicích, při výběru už zařazeného se dva prohodí.
+- Při zahájení zápasu se podle rozpisu předvyplní náš hráč i soupeř, takže u běžného zápasu stačí klepnout na Začít zapisovat. Týmovka a kriket se nepředvyplňují.
+- Sestavu jde měnit kdykoli, i uprostřed kola. Týká se jen zápasů, které ještě nezačaly. Změnit ji může každý člen, protože ji potřebuje ten, kdo zapisuje.
+- Když zakládáš kolo z Ligy a ve stejný den je událost Zápas se sestavou, převezme se z ní pořadí hráčů. U kol, která nemají vybráno doma nebo venku, se sestava nenabízí.
+
 ## Verze 0.23 (25. 11. 2026)
 
 - Při zahájení zápasu je soupeř předvyplněný podle pevného rozpisu ze zápisového archu (třeba zápas 1 je D1–H3, zápas 2 D2–H4). Předvyplnění jde změnit a týmovka s kriketem se nepředvyplňují.

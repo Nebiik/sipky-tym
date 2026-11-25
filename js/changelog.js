@@ -1,7 +1,17 @@
 // Přehled verzí. Novou verzi přidej úplně nahoru a zvyš VERSION.
-export const VERSION = "0.23";
+export const VERSION = "0.24";
 
 export const CHANGELOG = [
+  {
+    version: "0.24",
+    date: "25. 11. 2026",
+    changes: [
+      "V kole je nahoře blok Sestava podle archu: vybereš, kdo hraje na pozici D1 až D4 (doma), nebo H1 až H4 (venku). Hráč nemůže být na dvou pozicích, při výběru už zařazeného se dva prohodí.",
+      "Při zahájení zápasu se podle rozpisu předvyplní náš hráč i soupeř, takže u běžného zápasu stačí klepnout na Začít zapisovat. Týmovka a kriket se nepředvyplňují.",
+      "Sestavu jde měnit kdykoli, i uprostřed kola. Týká se jen zápasů, které ještě nezačaly. Změnit ji může každý člen, protože ji potřebuje ten, kdo zapisuje.",
+      "Když zakládáš kolo z Ligy a ve stejný den je událost Zápas se sestavou, převezme se z ní pořadí hráčů. U kol, která nemají vybráno doma nebo venku, se sestava nenabízí."
+    ]
+  },
   {
     version: "0.23",
     date: "25. 11. 2026",
